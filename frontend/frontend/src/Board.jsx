@@ -1,4 +1,5 @@
 import React from 'react'
+import {io} from "socket.io-client"
 import { useState } from 'react'
 import { useRef } from 'react'
 import { useEffect } from 'react'
@@ -7,13 +8,29 @@ const Board = () => {
     const [isDrawing, setIsDrawing] = useState(false)
     const lastX = useRef(0)
     const lastY = useRef(0)
+    const socketRef = useRef(null)
     useEffect(() => {
+        socketRef.current = io("http://localhost:5000")
+        socketRef.current.on("connect",()=>{
+            console.log("Connected to the server:", socketRef.current.id);
+        })
+        socketRef.current.emit("join-room", "test123")
+        socketRef.current.on("draw",(data)=>{
+            const ctx = canvas.getContext("2d")
+            ctx.beginPath()
+            ctx.moveTo(data.x0,data.y0)
+            ctx.lineTo(data.x1,data.y1)
+            ctx.stroke()
+        })
         const canvas = canvasRef.current
         if (!canvas) return 
         const ctx = canvas.getContext("2d")
         ctx.lineWidth = 5
         ctx.lineCap = "round"
         ctx.strokeStyle = "black"
+        return ()=>{
+            socketRef.current.disconnect()
+        }
     }, [])
     const handleMouseMove = (e) => {
         if (!isDrawing) return 
@@ -26,6 +43,12 @@ const Board = () => {
         ctx.moveTo(lastX.current, lastY.current);
         ctx.lineTo(x, y);
         ctx.stroke();
+        socketRef.current.emit("draw",{
+            x0: lastX.current,
+            y0: lastY.current,
+            x1: x,
+            y1: y
+        })
         lastX.current = x;
         lastY.current = y;
 
