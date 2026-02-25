@@ -8,8 +8,17 @@ const Board = () => {
     const [isDrawing, setIsDrawing] = useState(false)
     const lastX = useRef(0)
     const lastY = useRef(0)
+    // const lastEmitTime = useRef(0)
     const socketRef = useRef(null)
+    const pendingStrokeRef = useRef(null)
+    const animationFrameRef = useRef(null)
     useEffect(() => {
+        const canvas = canvasRef.current
+        if (!canvas) return 
+        const ctx = canvas.getContext("2d")
+        ctx.lineWidth = 5
+        ctx.lineCap = "round"
+        ctx.strokeStyle = "black"
         socketRef.current = io("http://localhost:5000")
         socketRef.current.on("connect",()=>{
             console.log("Connected to the server:", socketRef.current.id);
@@ -22,13 +31,16 @@ const Board = () => {
             ctx.lineTo(data.x1,data.y1)
             ctx.stroke()
         })
-        const canvas = canvasRef.current
-        if (!canvas) return 
-        const ctx = canvas.getContext("2d")
-        ctx.lineWidth = 5
-        ctx.lineCap = "round"
-        ctx.strokeStyle = "black"
+        const emitLoop  = ()=>{
+            if(pendingStrokeRef.current && socketRef.current){
+                socketRef.current.emit("draw",pendingStrokeRef.current)
+                pendingStrokeRef.current = null
+            }
+            animationFrameRef.current = requestAnimationFrame(emitLoop)
+        }
+        animationFrameRef.current = requestAnimationFrame(emitLoop)
         return ()=>{
+            cancelAnimationFrame(animationFrameRef.current)
             socketRef.current.disconnect()
         }
     }, [])
@@ -43,12 +55,12 @@ const Board = () => {
         ctx.moveTo(lastX.current, lastY.current);
         ctx.lineTo(x, y);
         ctx.stroke();
-        socketRef.current.emit("draw",{
+        pendingStrokeRef.current = {
             x0: lastX.current,
             y0: lastY.current,
             x1: x,
             y1: y
-        })
+        }
         lastX.current = x;
         lastY.current = y;
 
