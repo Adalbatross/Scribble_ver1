@@ -3,7 +3,10 @@ import {io} from "socket.io-client"
 import { useState } from 'react'
 import { useRef } from 'react'
 import { useEffect } from 'react'
+import { useParams } from 'react-router-dom'
 const Board = () => {
+    const {id} = useParams()
+    console.log(`Boards's ID : ${id}`) 
     const canvasRef = useRef(null)
     const [isDrawing, setIsDrawing] = useState(false)
     const lastX = useRef(0)
@@ -23,13 +26,22 @@ const Board = () => {
         socketRef.current.on("connect",()=>{
             console.log("Connected to the server:", socketRef.current.id);
         })
-        socketRef.current.emit("join-room", "test123")
+        socketRef.current.emit("join-room", id)
         socketRef.current.on("draw",(data)=>{
             const ctx = canvas.getContext("2d")
             ctx.beginPath()
             ctx.moveTo(data.x0,data.y0)
             ctx.lineTo(data.x1,data.y1)
             ctx.stroke()
+        })
+        socketRef.current.on("load-history", (strokes)=>{
+            const ctx = canvas.getContext("2d")
+            strokes.forEach((stroke)=>{
+                ctx.beginPath()
+                ctx.moveTo(stroke.x0, stroke.y0)
+                ctx.lineTo(stroke.x1, stroke.y1)
+                ctx.stroke()
+            })
         })
         const emitLoop  = ()=>{
             if(pendingStrokeRef.current && socketRef.current){
@@ -82,9 +94,11 @@ const Board = () => {
         setIsDrawing(false)
     }
      return (
-        <div>
-       <div>Draw anything that you like: Down Below </div>
-       <canvas
+       <div>
+        <div>Draw anything that you like: Down Below </div>
+        <h2>Board: {id}</h2>
+        <canvas
+         id='canvas'
          style={{ border: "4px solid black" }}
          onMouseDown={handleMouseDown}
          onMouseMove={handleMouseMove}
@@ -93,8 +107,8 @@ const Board = () => {
          ref={canvasRef}
          width={800}
          height={600}
-       />
-       </div>
+        />
+        </div>
      );
 }
 
