@@ -11,14 +11,40 @@ const Board = () => {
     const [isDrawing, setIsDrawing] = useState(false)
     const lastX = useRef(0)
     const lastY = useRef(0)
-    // const lastEmitTime = useRef(0)
+    const strokeRef = useRef([])
     const socketRef = useRef(null)
     const pendingStrokeRef = useRef(null)
     const animationFrameRef = useRef(null)
+    const redraw  = ()=>{
+        const canvas = canvasRef.current
+        const ctx = canvas.getContext("2d")
+
+        ctx.clearRect(0,0, canvas.width, canvas.height)
+        strokeRef.current.forEach((stroke) => {
+            ctx.beginPath()
+            ctx.moveTo(stroke.x0 * canvas.width ,stroke.y0 * canvas.height)
+            ctx.lineTo(stroke.x1 * canvas.width ,stroke.y1 * canvas.height)
+            ctx.stroke()
+        })
+    }
     useEffect(() => {
         const canvas = canvasRef.current
         if (!canvas) return 
         const ctx = canvas.getContext("2d")
+        const resizeCanvas = () => {
+        canvas.width = canvas.offsetWidth
+        canvas.height = canvas.offsetHeight
+
+        const ctx = canvas.getContext("2d")
+        ctx.lineWidth = 5
+        ctx.lineCap = "round"
+        ctx.strokeStyle = "black"
+
+        redraw()
+        }
+
+        resizeCanvas()
+        window.addEventListener("resize", resizeCanvas)
         ctx.lineWidth = 5
         ctx.lineCap = "round"
         ctx.strokeStyle = "black"
@@ -28,20 +54,18 @@ const Board = () => {
         })
         socketRef.current.emit("join-room", id)
         socketRef.current.on("draw",(data)=>{
+            strokeRef.current.push(data)
             const ctx = canvas.getContext("2d")
             ctx.beginPath()
-            ctx.moveTo(data.x0,data.y0)
-            ctx.lineTo(data.x1,data.y1)
+            ctx.moveTo(data.x0 * canvas.width ,data.y0 * canvas.height)
+            ctx.lineTo(data.x1 * canvas.width ,data.y1 * canvas.height)
             ctx.stroke()
         })
         socketRef.current.on("load-history", (strokes)=>{
-            const ctx = canvas.getContext("2d")
-            strokes.forEach((stroke)=>{
-                ctx.beginPath()
-                ctx.moveTo(stroke.x0, stroke.y0)
-                ctx.lineTo(stroke.x1, stroke.y1)
-                ctx.stroke()
-            })
+            strokeRef.current = strokes
+            redraw()
+
+
         })
         const emitLoop  = ()=>{
             if(pendingStrokeRef.current && socketRef.current){
@@ -53,19 +77,25 @@ const Board = () => {
         animationFrameRef.current = requestAnimationFrame(emitLoop)
         return ()=>{
             cancelAnimationFrame(animationFrameRef.current)
+            window.removeEventListener("resize", resizeCanvas)
             socketRef.current.disconnect()
         }
-    }, [])
+    }, [id])
     const handleMouseMove = (e) => {
         if (!isDrawing) return 
         const canvas = canvasRef.current;
         const rect = canvas.getBoundingClientRect();
         const ctx = canvas.getContext("2d");
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const raw_x = e.clientX - rect.left;
+        const raw_y = e.clientY - rect.top;
+        const x = raw_x / canvas.width
+        const y = raw_y / canvas.height
         ctx.beginPath()
-        ctx.moveTo(lastX.current, lastY.current);
-        ctx.lineTo(x, y);
+        ctx.moveTo(
+        lastX.current * canvas.width,
+        lastY.current * canvas.height
+        );
+        ctx.lineTo(x * canvas.width, y * canvas.height);
         ctx.stroke();
         pendingStrokeRef.current = {
             x0: lastX.current,
@@ -73,6 +103,7 @@ const Board = () => {
             x1: x,
             y1: y
         }
+        strokeRef.current.push(pendingStrokeRef.current)
         lastX.current = x;
         lastY.current = y;
 
@@ -80,8 +111,11 @@ const Board = () => {
     const handleMouseDown = (e) => {
         const canvas = canvasRef.current
         const rect = canvas.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        const y = e.clientY - rect.top
+        const rawX = e.clientX - rect.left
+        const rawY = e.clientY - rect.top
+
+        const x = rawX / canvas.width
+        const y = rawY / canvas.height
 
         lastX.current = x
         lastY.current = y
@@ -93,23 +127,38 @@ const Board = () => {
     const handleMouseUp = () => {
         setIsDrawing(false)
     }
-     return (
-       <div>
-        <div>Draw anything that you like: Down Below </div>
-        <h2>Board: {id}</h2>
-        <canvas
-         id='canvas'
-         style={{ border: "4px solid black" }}
+  return (
+    <div className="h-screen flex flex-col bg-white">
+
+      {/* Navbar */}
+      <div className="h-14 border-b flex items-center justify-between px-4">
+        <div className="font-semibold">Scribble</div>
+        <div className="text-sm text-gray-500">Board: {id}</div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* Toolbar */}
+        <div className="w-16 border-r flex flex-col items-center py-4 space-y-6 bg-gray-50">
+          <button className="w-10 h-10 rounded-md bg-black"></button>
+          <button className="w-10 h-10 rounded-md border"></button>
+        </div>
+
+        {/* Canvas Area */}
+        <div className="flex-1 relative bg-gray-100">
+          <canvas className="w-full h-full"
          onMouseDown={handleMouseDown}
          onMouseMove={handleMouseMove}
          onMouseLeave={handleMouseUp}
          onMouseUp={handleMouseUp}
          ref={canvasRef}
-         width={800}
-         height={600}
-        />
+          ></canvas>
         </div>
-     );
+
+      </div>
+    </div>
+  )
 }
 
 export default Board
