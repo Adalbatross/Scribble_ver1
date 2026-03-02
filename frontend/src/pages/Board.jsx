@@ -58,13 +58,7 @@ const Board = () => {
         })
         socketRef.current.on("load-history", (strokes)=>{
             strokeRef.current = strokes
-            const ctx = canvas.getContext("2d")
-            strokes.forEach((stroke)=>{
-                ctx.beginPath()
-                ctx.moveTo(stroke.x0, stroke.y0)
-                ctx.lineTo(stroke.x1, stroke.y1)
-                ctx.stroke()
-            })
+            redraw()
         })
         const emitLoop  = ()=>{
             if(pendingStrokeRef.current && socketRef.current){
@@ -79,7 +73,7 @@ const Board = () => {
             window.removeEventListener("resize", resizeCanvas)
             socketRef.current.disconnect()
         }
-    }, [])
+    }, [id])
     const handleMouseMove = (e) => {
         if (!isDrawing) return 
         const canvas = canvasRef.current;
@@ -95,7 +89,8 @@ const Board = () => {
             x0: lastX.current,
             y0: lastY.current,
             x1: x,
-            y1: y
+            y1: y,
+            userId: socketRef.current.id
         }
         strokeRef.current.push(pendingStrokeRef.current)
         lastX.current = x;
@@ -133,6 +128,8 @@ const Board = () => {
         {/* Toolbar */}
         <div className="w-16 border-r flex flex-col items-center py-4 space-y-6 bg-gray-50">
           <button className="w-10 h-10 rounded-md bg-black"></button>
+          <button  onClick={()=>socketRef.current.emit("undo")} 
+            className="w-10 h-10 rounded-md border">U</button>
           <button className="w-10 h-10 rounded-md border"></button>
         </div>
 

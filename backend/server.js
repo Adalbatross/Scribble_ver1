@@ -31,7 +31,21 @@ io.on("connection", (socket) => {
         rooms[roomId].push(data) // here we change the draw_handler to draw the history for the new joiny 
         socket.to(socket.data.roomId).emit("draw",data)
     })
+    socket.on("undo", ()=>{
+        const roomId = socket.data.roomId
+        console.log("undo recieved from ",socket.id);
+        
+        if(!roomId || !rooms[roomId]) return 
+        const userId = socket.id
 
+        for(let i= rooms[roomId].length -1; i>=0; i--){
+            if(rooms[roomId][i].userId === userId){
+                rooms[roomId].splice(i,1)
+                break
+            }
+        }
+        io.to(roomId).emit("load-history", rooms[roomId])
+    })
 
     socket.on("disconnect", () => {
         const roomId = socket.data.roomId
