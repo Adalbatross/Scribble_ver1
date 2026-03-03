@@ -14,9 +14,10 @@ const io = new Server(server, {
 
 io.on("connection", (socket) => {
     console.log("User connected:", socket.id)
-    socket.on("join-room", (roomId) => {
+    socket.on("join-room", ({roomId, userId}) => {
         socket.join(roomId)
         socket.data.roomId = roomId
+        socket.data.userId = userId
         if(!rooms[roomId]){
             rooms[roomId] = [] // this creates the roomhistory if there is no room for the user that has joined to save the memory of the code
         }
@@ -24,23 +25,37 @@ io.on("connection", (socket) => {
         console.log(`Socket ${socket.id} joined room ${roomId}`)
 
     })
-    socket.on("draw",(data)=>{
+    socket.on("stroke-complete", (stroke) => {
         const roomId = socket.data.roomId
-        if(!roomId) return 
-        if(!rooms[roomId]) return 
-        rooms[roomId].push(data) // here we change the draw_handler to draw the history for the new joiny 
-        socket.to(socket.data.roomId).emit("draw",data)
+        const userId = socket.data.userId
+        if (!roomId) return
+
+        if (!rooms[roomId]) {
+            rooms[roomId] = []
+        }
+
+        const newStroke = {
+            id: stroke.id,
+            userId: userId, // persistent identity
+            points: stroke.points
+        }
+
+        rooms[roomId].push(newStroke)
+
+        socket.to(roomId).emit("stroke-complete", newStroke)
     })
     socket.on("undo", ()=>{
         const roomId = socket.data.roomId
         console.log("undo recieved from ",socket.id);
         
         if(!roomId || !rooms[roomId]) return 
-        const userId = socket.id
-
+        const userId = socket.data.userId
+        
         for(let i= rooms[roomId].length -1; i>=0; i--){
             if(rooms[roomId][i].userId === userId){
+                console.log("before Undo:", rooms[roomId].length);
                 rooms[roomId].splice(i,1)
+                console.log("after Undo:", rooms[roomId].length);
                 break
             }
         }

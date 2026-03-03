@@ -9,21 +9,44 @@ const Board = () => {
     console.log(`Boards's ID : ${id}`) 
     const canvasRef = useRef(null)
     const [isDrawing, setIsDrawing] = useState(false)
-    const lastX = useRef(0)
-    const lastY = useRef(0)
     const strokeRef = useRef([])
     const socketRef = useRef(null)
     const pendingStrokeRef = useRef(null)
     const animationFrameRef = useRef(null)
-    const redraw  = ()=>{
+    const currentStrokeRef = useRef(null)
+    const userIdRef = useRef(null)
+    if(! userIdRef.current){
+        const existing = localStorage.getItem("scribble-user-id")
+        if(existing){
+            userIdRef.current = existing
+        }else{
+            const newId = crypto.randomUUID()
+            localStorage.setItem("scribble-user-id", newId)
+            userIdRef.current = newId
+        }
+    }
+    const redraw = () => {
         const canvas = canvasRef.current
         const ctx = canvas.getContext("2d")
 
-        ctx.clearRect(0,0, canvas.width, canvas.height)
-        strokeRef.current.forEach((stroke) => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+        ctx.lineWidth = 5
+        ctx.lineCap = "round"
+        ctx.strokeStyle = "black"
+
+        strokeRef.current.forEach(stroke => {
+            if (!stroke.points.length) return
+
             ctx.beginPath()
-            ctx.moveTo(stroke.x0, stroke.y0)
-            ctx.lineTo(stroke.x1, stroke.y1)
+            const first = stroke.points[0]
+            ctx.moveTo(first.x, first.y)
+
+            for (let i = 1; i < stroke.points.length; i++) {
+                const point = stroke.points[i]
+                ctx.lineTo(point.x, point.y)
+            }
+
             ctx.stroke()
         })
     }
@@ -47,14 +70,13 @@ const Board = () => {
         socketRef.current.on("connect",()=>{
             console.log("Connected to the server:", socketRef.current.id);
         })
-        socketRef.current.emit("join-room", id)
-        socketRef.current.on("draw",(data)=>{
-            strokeRef.current.push(data)
-            const ctx = canvas.getContext("2d")
-            ctx.beginPath()
-            ctx.moveTo(data.x0,data.y0)
-            ctx.lineTo(data.x1,data.y1)
-            ctx.stroke()
+        socketRef.current.emit("join-room", {
+            roomId: id,
+            userId: userIdRef.current
+        })
+        socketRef.current.on("stroke-complete", (stroke)=>{
+            strokeRef.current.push(stroke)
+            redraw()
         })
         socketRef.current.on("load-history", (strokes)=>{
             strokeRef.current = strokes
@@ -81,20 +103,15 @@ const Board = () => {
         const ctx = canvas.getContext("2d");
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
+        const stroke = currentStrokeRef.current
+        if(!stroke) return 
+        const lastPoint = stroke.points[stroke.points.length - 1]
         ctx.beginPath()
-        ctx.moveTo(lastX.current, lastY.current);
+        ctx.moveTo(lastPoint.x, lastPoint.y);
         ctx.lineTo(x, y);
-        ctx.stroke();
-        pendingStrokeRef.current = {
-            x0: lastX.current,
-            y0: lastY.current,
-            x1: x,
-            y1: y,
-            userId: socketRef.current.id
-        }
-        strokeRef.current.push(pendingStrokeRef.current)
-        lastX.current = x;
-        lastY.current = y;
+        ctx.stroke()
+
+        stroke.points.push({x,y})
 
     }
     const handleMouseDown = (e) => {
@@ -103,14 +120,19 @@ const Board = () => {
         const x = e.clientX - rect.left
         const y = e.clientY - rect.top
 
-        lastX.current = x
-        lastY.current = y
-
+        currentStrokeRef.current = {
+            id: crypto.randomUUID(),
+            points: [{x,y}]
+        }
         setIsDrawing(true)
 
         console.log("Mouse Down at:",x,y)
     }
     const handleMouseUp = () => {
+        if(!currentStrokeRef.current) return
+        strokeRef.current.push(currentStrokeRef.current)
+        socketRef.current.emit("stroke-complete", currentStrokeRef.current)
+        currentStrokeRef.current = null
         setIsDrawing(false)
     }
   return (
