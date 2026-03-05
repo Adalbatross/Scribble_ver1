@@ -37,6 +37,9 @@ io.on("connection", (socket) => {
         const newStroke = {
             id: stroke.id,
             userId: userId, // persistent identity
+            tool: stroke.tool,
+            color: stroke.color,
+            width: stroke.width,
             points: stroke.points
         }
 

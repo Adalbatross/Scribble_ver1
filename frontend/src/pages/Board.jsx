@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRef } from 'react'
 import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
+import Toolbar from '../components/Toolbar'
+
 const Board = () => {
     const {id} = useParams()
     console.log(`Boards's ID : ${id}`) 
@@ -11,10 +13,11 @@ const Board = () => {
     const [isDrawing, setIsDrawing] = useState(false)
     const strokeRef = useRef([])
     const socketRef = useRef(null)
-    const pendingStrokeRef = useRef(null)
-    const animationFrameRef = useRef(null)
     const currentStrokeRef = useRef(null)
     const userIdRef = useRef(null)
+    const [tool, setTool] = useState("pen")
+    const [color, setColor] = useState("black")
+    const [brushSize, setBrushSize] = useState(5)
     if(! userIdRef.current){
         const existing = localStorage.getItem("scribble-user-id")
         if(existing){
@@ -33,12 +36,21 @@ const Board = () => {
 
         ctx.lineWidth = 5
         ctx.lineCap = "round"
-        ctx.strokeStyle = "black"
 
         strokeRef.current.forEach(stroke => {
+
             if (!stroke.points.length) return
+            ctx.lineWidth = stroke.width
+            ctx.strokeStyle = stroke.color
 
             ctx.beginPath()
+
+            if (stroke.tool === "eraser") {
+                ctx.globalCompositeOperation = "destination-out"
+            } else {
+                ctx.globalCompositeOperation = "source-over"
+            }
+
             const first = stroke.points[0]
             ctx.moveTo(first.x, first.y)
 
@@ -49,6 +61,8 @@ const Board = () => {
 
             ctx.stroke()
         })
+
+        ctx.globalCompositeOperation = "source-over"
     }
     useEffect(() => {
         const canvas = canvasRef.current
@@ -82,16 +96,7 @@ const Board = () => {
             strokeRef.current = strokes
             redraw()
         })
-        const emitLoop  = ()=>{
-            if(pendingStrokeRef.current && socketRef.current){
-                socketRef.current.emit("draw",pendingStrokeRef.current)
-                pendingStrokeRef.current = null
-            }
-            animationFrameRef.current = requestAnimationFrame(emitLoop)
-        }
-        animationFrameRef.current = requestAnimationFrame(emitLoop)
         return ()=>{
-            cancelAnimationFrame(animationFrameRef.current)
             window.removeEventListener("resize", resizeCanvas)
             socketRef.current.disconnect()
         }
@@ -106,9 +111,16 @@ const Board = () => {
         const stroke = currentStrokeRef.current
         if(!stroke) return 
         const lastPoint = stroke.points[stroke.points.length - 1]
+        ctx.lineWidth = stroke.width
+        ctx.strokeStyle = stroke.color
         ctx.beginPath()
-        ctx.moveTo(lastPoint.x, lastPoint.y);
-        ctx.lineTo(x, y);
+        if(stroke.tool === "eraser"){
+            ctx.globalCompositeOperation = "destination-out"
+        }else{
+            ctx.globalCompositeOperation = "source-over"
+        }
+        ctx.moveTo(lastPoint.x, lastPoint.y)
+        ctx.lineTo(x,y)
         ctx.stroke()
 
         stroke.points.push({x,y})
@@ -122,6 +134,9 @@ const Board = () => {
 
         currentStrokeRef.current = {
             id: crypto.randomUUID(),
+            tool: tool,
+            color:color,
+            width: brushSize,
             points: [{x,y}]
         }
         setIsDrawing(true)
@@ -132,6 +147,8 @@ const Board = () => {
         if(!currentStrokeRef.current) return
         strokeRef.current.push(currentStrokeRef.current)
         socketRef.current.emit("stroke-complete", currentStrokeRef.current)
+        const ctx = canvasRef.current.getContext("2d")
+        ctx.globalCompositeOperation = "source-over"
         currentStrokeRef.current = null
         setIsDrawing(false)
     }
@@ -148,12 +165,15 @@ const Board = () => {
       <div className="flex flex-1 overflow-hidden">
 
         {/* Toolbar */}
-        <div className="w-16 border-r flex flex-col items-center py-4 space-y-6 bg-gray-50">
-          <button className="w-10 h-10 rounded-md bg-black"></button>
-          <button  onClick={()=>socketRef.current.emit("undo")} 
-            className="w-10 h-10 rounded-md border">U</button>
-          <button className="w-10 h-10 rounded-md border"></button>
-        </div>
+        <Toolbar 
+            tool={tool}
+            setTool={setTool}
+            color = {color}
+            setColor = {setColor}
+            brushSize = {brushSize}
+            setBrushSize = {setBrushSize}
+            onUndo={()=>{socketRef.current.emit("undo")}}
+        />
 
         {/* Canvas Area */}
         <div className="flex-1 relative bg-gray-100">
