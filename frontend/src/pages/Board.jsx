@@ -12,6 +12,7 @@ const Board = () => {
     const canvasRef = useRef(null)
     const [isDrawing, setIsDrawing] = useState(false)
     const strokeRef = useRef([])
+    const scaleRef = useRef(1)
     const socketRef = useRef(null)
     const offsetXRef = useRef(0)
     const offsetYRef = useRef(0)
@@ -43,6 +44,7 @@ const Board = () => {
         ctx.lineCap = "round"
         
         ctx.translate(offsetXRef.current, offsetYRef.current)
+        ctx.scale(scaleRef.current, scaleRef.current)
         strokeRef.current.forEach(stroke => {
 
             if (!stroke.points.length) return
@@ -102,22 +104,45 @@ const Board = () => {
             strokeRef.current = strokes
             redraw()
         })
+        const handleWheel  = (e)=>{
+            e.preventDefault()
+            const zoomIntensity = 0.1
+            const canvas = canvasRef.current
+            const rect = canvas.getBoundingClientRect()
+
+            const mouseX = e.clientX - rect.left
+            const mouseY = e.clientY - rect.top
+
+            const worldX = (mouseX - offsetXRef.current) / scaleRef.current
+            const worldY = (mouseY - offsetYRef.current) / scaleRef.current
+
+            const direction = e.deltaY > 0 ? -1 : 1
+            const zoom = 1 + direction * zoomIntensity
+            scaleRef.current *= zoom
+
+            offsetXRef.current = mouseX - worldX * scaleRef.current
+            offsetYRef.current = mouseY - worldY * scaleRef.current
+
+            redraw()
+        }
         const handleKeyDown = (e)=>{
             if(e.code === "Space"){
                 spacePressRef.current = true
+                canvasRef.current.style.cursor = "grab"
             }
-            canvasRef.current.style.cursor = "grab"
         }
         const handleKeyUp = (e)=>{
             if(e.code === "Space"){
                 spacePressRef.current = false
+                canvasRef.current.style.cursor = "default"
             }
-            canvasRef.current.style.cursor = "default"
         }
         window.addEventListener("keydown",handleKeyDown)
         window.addEventListener("keyup",handleKeyUp)
+        canvas.addEventListener("wheel", handleWheel, {passive: false})
         return ()=>{
             window.removeEventListener("resize", resizeCanvas)
+            window.removeEventListener("wheel", handleWheel)
             socketRef.current.disconnect()
         }
     }, [id])
@@ -140,24 +165,26 @@ const Board = () => {
         const canvas = canvasRef.current;
         const rect = canvas.getBoundingClientRect();
         const ctx = canvas.getContext("2d");
-        const x = e.clientX - rect.left - offsetXRef.current;
-        const y = e.clientY - rect.top - offsetYRef.current;
+        const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current;
+        const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current;
         const stroke = currentStrokeRef.current
         if(!stroke) return 
         const lastPoint = stroke.points[stroke.points.length - 1]
         ctx.save()
         ctx.translate(offsetXRef.current, offsetYRef.current)
+        ctx.scale(scaleRef.current, scaleRef.current)
         ctx.lineWidth = stroke.width
         ctx.strokeStyle = stroke.color
-        ctx.beginPath()
         if(stroke.tool === "eraser"){
             ctx.globalCompositeOperation = "destination-out"
         }else{
             ctx.globalCompositeOperation = "source-over"
         }
+        ctx.beginPath()
         ctx.moveTo(lastPoint.x, lastPoint.y)
         ctx.lineTo(x,y)
         ctx.stroke()
+
         ctx.restore()
 
         stroke.points.push({x,y})
@@ -174,8 +201,8 @@ const Board = () => {
         }
         const canvas = canvasRef.current
         const rect = canvas.getBoundingClientRect()
-        const x = e.clientX - rect.left - offsetXRef.current
-        const y = e.clientY - rect.top - offsetYRef.current
+        const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current
+        const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current
 
         currentStrokeRef.current = {
             id: crypto.randomUUID(),
