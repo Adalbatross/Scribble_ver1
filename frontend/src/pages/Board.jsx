@@ -13,6 +13,11 @@ const Board = () => {
     const [isDrawing, setIsDrawing] = useState(false)
     const strokeRef = useRef([])
     const socketRef = useRef(null)
+    const offsetXRef = useRef(0)
+    const offsetYRef = useRef(0)
+    const isPanningRef = useRef(false)
+    const panStartRef = useRef({x:0, y:0})
+    const spacePressRef = useRef(false)
     const currentStrokeRef = useRef(null)
     const userIdRef = useRef(null)
     const [tool, setTool] = useState("pen")
@@ -33,10 +38,11 @@ const Board = () => {
         const ctx = canvas.getContext("2d")
 
         ctx.clearRect(0, 0, canvas.width, canvas.height)
-
+        ctx.save()
         ctx.lineWidth = 5
         ctx.lineCap = "round"
-
+        
+        ctx.translate(offsetXRef.current, offsetYRef.current)
         strokeRef.current.forEach(stroke => {
 
             if (!stroke.points.length) return
@@ -61,7 +67,7 @@ const Board = () => {
 
             ctx.stroke()
         })
-
+        ctx.restore()
         ctx.globalCompositeOperation = "source-over"
     }
     useEffect(() => {
@@ -96,21 +102,51 @@ const Board = () => {
             strokeRef.current = strokes
             redraw()
         })
+        const handleKeyDown = (e)=>{
+            if(e.code === "Space"){
+                spacePressRef.current = true
+            }
+            canvasRef.current.style.cursor = "grab"
+        }
+        const handleKeyUp = (e)=>{
+            if(e.code === "Space"){
+                spacePressRef.current = false
+            }
+            canvasRef.current.style.cursor = "default"
+        }
+        window.addEventListener("keydown",handleKeyDown)
+        window.addEventListener("keyup",handleKeyUp)
         return ()=>{
             window.removeEventListener("resize", resizeCanvas)
             socketRef.current.disconnect()
         }
     }, [id])
     const handleMouseMove = (e) => {
+        if(isPanningRef.current){
+            const dx = e.clientX - panStartRef.current.x
+            const dy = e.clientY - panStartRef.current.y
+            offsetXRef.current += dx
+            offsetYRef.current += dy
+
+            panStartRef.current = {
+                x: e.clientX,
+                y: e.clientY
+            }
+
+            redraw()
+            return 
+        }
         if (!isDrawing) return 
         const canvas = canvasRef.current;
         const rect = canvas.getBoundingClientRect();
         const ctx = canvas.getContext("2d");
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const x = e.clientX - rect.left - offsetXRef.current;
+        const y = e.clientY - rect.top - offsetYRef.current;
         const stroke = currentStrokeRef.current
         if(!stroke) return 
         const lastPoint = stroke.points[stroke.points.length - 1]
+        ctx.save()
+        ctx.translate(offsetXRef.current, offsetYRef.current)
         ctx.lineWidth = stroke.width
         ctx.strokeStyle = stroke.color
         ctx.beginPath()
@@ -122,15 +158,24 @@ const Board = () => {
         ctx.moveTo(lastPoint.x, lastPoint.y)
         ctx.lineTo(x,y)
         ctx.stroke()
+        ctx.restore()
 
         stroke.points.push({x,y})
 
     }
     const handleMouseDown = (e) => {
+        if(spacePressRef.current){
+            isPanningRef.current = true
+            panStartRef.current = {
+                x: e.clientX,
+                y: e.clientY
+            }
+            return 
+        }
         const canvas = canvasRef.current
         const rect = canvas.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        const y = e.clientY - rect.top
+        const x = e.clientX - rect.left - offsetXRef.current
+        const y = e.clientY - rect.top - offsetYRef.current
 
         currentStrokeRef.current = {
             id: crypto.randomUUID(),
@@ -144,6 +189,10 @@ const Board = () => {
         console.log("Mouse Down at:",x,y)
     }
     const handleMouseUp = () => {
+        if(isPanningRef.current){
+            isPanningRef.current = false
+            return 
+        }
         if(!currentStrokeRef.current) return
         strokeRef.current.push(currentStrokeRef.current)
         socketRef.current.emit("stroke-complete", currentStrokeRef.current)
@@ -177,7 +226,7 @@ const Board = () => {
 
         {/* Canvas Area */}
         <div className="flex-1 relative bg-gray-100">
-          <canvas className="w-full h-full"
+          <canvas className="w-full h-full bg-amber-50"
          onMouseDown={handleMouseDown}
          onMouseMove={handleMouseMove}
          onMouseLeave={handleMouseUp}
