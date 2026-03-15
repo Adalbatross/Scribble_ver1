@@ -45,7 +45,7 @@ io.on("connection", (socket) => {
 
         rooms[roomId].push(newStroke)
 
-        socket.to(roomId).emit("stroke-complete", newStroke)
+        io.to(roomId).emit("stroke-complete", newStroke)
     })
     socket.on("undo", ()=>{
         const roomId = socket.data.roomId
@@ -57,25 +57,15 @@ io.on("connection", (socket) => {
         for(let i= rooms[roomId].length -1; i>=0; i--){
             if(rooms[roomId][i].userId === userId){
                 console.log("before Undo:", rooms[roomId].length);
-                rooms[roomId].splice(i,1)
+                const removed = rooms[roomId].splice(i,1)[0]
+                io.to(roomId).emit("undo", removed.id)
                 console.log("after Undo:", rooms[roomId].length);
                 break
             }
         }
-        io.to(roomId).emit("load-history", rooms[roomId])
     })
 
     socket.on("disconnect", () => {
-        const roomId = socket.data.roomId
-        if(roomId){
-            const clients = io.sockets.adapter.rooms.get(roomId)
-
-            if(!clients || clients.size === 0 ){
-                delete rooms[roomId]
-                console.log(`Room ${roomId} deleted `);
-                
-            }
-        }
         console.log("User disconnected:", socket.id)
     })
 })

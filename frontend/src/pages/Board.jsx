@@ -7,6 +7,10 @@ import { useParams } from 'react-router-dom'
 import Toolbar from '../components/Toolbar'
 
 const Board = () => {
+    const MIN_ZOOM = 0.1
+    const MAX_ZOOM = 10
+    const gridCanvasRef = useRef(null)
+    const baseGridSize = 50
     const {id} = useParams()
     console.log(`Boards's ID : ${id}`) 
     const canvasRef = useRef(null)
@@ -34,6 +38,69 @@ const Board = () => {
             userIdRef.current = newId
         }
     }
+    const drawGrid = ()=> {
+        const canvas = gridCanvasRef.current
+        const ctx = canvas.getContext("2d")
+        ctx.clearRect(0,0, canvas.width, canvas.height)
+        const width = canvas.width
+        const height = canvas.height
+
+        const scale = scaleRef.current
+        const offsetX = offsetXRef.current
+        const offsetY = offsetYRef.current
+
+        // const baseGridSize = 50
+
+        let gridSize = baseGridSize
+        if (gridSize * scale < 8) gridSize *= 2 
+        if(scale< 0.5) gridSize *=4
+        else if (scale<1) gridSize *= 2
+        else if (scale>2) gridSize /= 2
+        ctx.save()
+
+        ctx.translate(offsetX, offsetY)
+        ctx.scale(scale, scale)
+
+        const startX = -offsetX / scale
+        const startY = -offsetY / scale
+        const endX = startX+ width / scale
+        const endY = startY+ height / scale
+
+        const firstX  = Math.floor(startX/gridSize) * gridSize
+        const firstY  = Math.floor(startY/gridSize) * gridSize
+
+        for(let x= firstX; x< endX; x+=gridSize){
+            ctx.beginPath()
+            if (Math.round(x / gridSize) % 10 === 0){
+                ctx.strokeStyle = '#cfcfcf'
+                ctx.lineWidth = 1.5
+            }else{
+                ctx.strokeStyle = '#e8e8e8'
+                ctx.lineWidth = 1
+            }
+
+            ctx.moveTo(Math.round(x) +0.5 ,startY)
+            ctx.lineTo(Math.round(x) + 0.5,endY)
+            ctx.stroke()
+        }
+        for(let y= firstY; y< endY; y+=gridSize){
+            ctx.beginPath()
+            if (Math.round(y / gridSize) % 10 === 0){
+                ctx.strokeStyle = '#cfcfcf'
+                ctx.lineWidth = 1.5
+            }else{
+                ctx.strokeStyle = '#e8e8e8'
+                ctx.lineWidth = 1
+            }
+
+            ctx.moveTo(startX,Math.round(y)+0.5)
+            ctx.lineTo(endX, Math.round(y)+0.5)
+            ctx.stroke()
+        }
+
+        ctx.restore() 
+  
+    }
     const redraw = () => {
         const canvas = canvasRef.current
         const ctx = canvas.getContext("2d")
@@ -46,27 +113,27 @@ const Board = () => {
         ctx.translate(offsetXRef.current, offsetYRef.current)
         ctx.scale(scaleRef.current, scaleRef.current)
         strokeRef.current.forEach(stroke => {
-
+            
             if (!stroke.points.length) return
             ctx.lineWidth = stroke.width
             ctx.strokeStyle = stroke.color
-
+            
             ctx.beginPath()
-
+            
             if (stroke.tool === "eraser") {
                 ctx.globalCompositeOperation = "destination-out"
             } else {
                 ctx.globalCompositeOperation = "source-over"
             }
-
+            
             const first = stroke.points[0]
             ctx.moveTo(first.x, first.y)
-
+            
             for (let i = 1; i < stroke.points.length; i++) {
                 const point = stroke.points[i]
                 ctx.lineTo(point.x, point.y)
             }
-
+            
             ctx.stroke()
         })
         ctx.restore()
@@ -76,10 +143,17 @@ const Board = () => {
         const canvas = canvasRef.current
         if (!canvas) return 
         const ctx = canvas.getContext("2d")
+        
         const resizeCanvas = () => {
             // const strokes = roomCacheRef.current 
+            const canvas = canvasRef.current
+            const gridCanvas = gridCanvasRef.current
             canvas.width = canvas.offsetWidth
             canvas.height = canvas.offsetHeight
+
+            gridCanvas.width = gridCanvas.offsetWidth
+            gridCanvas.height = gridCanvas.offsetHeight
+            drawGrid()
             redraw()
         }
 
@@ -102,6 +176,11 @@ const Board = () => {
         })
         socketRef.current.on("load-history", (strokes)=>{
             strokeRef.current = strokes
+            drawGrid()
+            redraw()
+        })
+        socketRef.current.on("undo", (strokeId)=>{
+            strokeRef.current = strokeRef.current.filter(s=> s.id !== strokeId)
             redraw()
         })
         const handleWheel  = (e)=>{
@@ -118,11 +197,12 @@ const Board = () => {
 
             const direction = e.deltaY > 0 ? -1 : 1
             const zoom = 1 + direction * zoomIntensity
-            scaleRef.current *= zoom
+            const newScale = scaleRef.current * zoom
+            scaleRef.current  = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newScale))
 
             offsetXRef.current = mouseX - worldX * scaleRef.current
             offsetYRef.current = mouseY - worldY * scaleRef.current
-
+            drawGrid()
             redraw()
         }
         const handleKeyDown = (e)=>{
@@ -142,7 +222,9 @@ const Board = () => {
         canvas.addEventListener("wheel", handleWheel, {passive: false})
         return ()=>{
             window.removeEventListener("resize", resizeCanvas)
-            window.removeEventListener("wheel", handleWheel)
+            window.removeEventListener("keydown", handleKeyDown)
+            window.removeEventListener("keyup", handleKeyUp)
+            canvas.removeEventListener("wheel", handleWheel)
             socketRef.current.disconnect()
         }
     }, [id])
@@ -157,7 +239,7 @@ const Board = () => {
                 x: e.clientX,
                 y: e.clientY
             }
-
+            drawGrid()
             redraw()
             return 
         }
@@ -223,6 +305,8 @@ const Board = () => {
         if(!currentStrokeRef.current) return
         strokeRef.current.push(currentStrokeRef.current)
         socketRef.current.emit("stroke-complete", currentStrokeRef.current)
+        drawGrid()
+        redraw()
         const ctx = canvasRef.current.getContext("2d")
         ctx.globalCompositeOperation = "source-over"
         currentStrokeRef.current = null
@@ -249,17 +333,24 @@ const Board = () => {
             brushSize = {brushSize}
             setBrushSize = {setBrushSize}
             onUndo={()=>{socketRef.current.emit("undo")}}
-        />
+            />
 
         {/* Canvas Area */}
         <div className="flex-1 relative bg-gray-100">
-          <canvas className="w-full h-full bg-amber-50"
-         onMouseDown={handleMouseDown}
-         onMouseMove={handleMouseMove}
-         onMouseLeave={handleMouseUp}
-         onMouseUp={handleMouseUp}
-         ref={canvasRef}
-          ></canvas>
+            <canvas className="absolute inset-0 w-full h-full"
+             ref={canvasRef}
+             onMouseDown={handleMouseDown}
+             onMouseMove={handleMouseMove}
+             onMouseLeave={handleMouseUp}
+             onMouseUp={handleMouseUp}
+             style={{zIndex: 2, border: "2px solid red"}}
+             />
+            <canvas 
+            ref={gridCanvasRef}
+            className='absolute inset-0 w-full h-full pointer-events-none'
+            style={{zIndex: 1, border: "2px solid blue"}}
+            />
+             {/* Drawing canvas */}
         </div>
 
       </div>
