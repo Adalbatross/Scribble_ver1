@@ -44,6 +44,24 @@ const Toolbar = ({ tool, setTool, onUndo, color, setColor, brushSize, setBrushSi
       <div className="text-xs text-gray-600">
         {brushSize}px
       </div>
+      <button
+        onClick={() => setTool("rect")}
+        className={`w-10 h-10 rounded-md border hover:bg-gray-200 ${tool === "rect" ? "bg-gray-300" : ""}`}
+      >
+        ▭
+      </button>
+      <button
+        onClick={() => setTool("line")}
+        className={`w-10 h-10 rounded-md border hover:bg-gray-200 ${tool === "line" ? "bg-gray-300" : ""}`}
+      >
+        /
+      </button>
+      <button
+      onClick={() => setTool("circle")}
+      className={`w-10 h-10 rounded-md border hover:bg-gray-200 ${tool === "circle" ? "bg-gray-300" : ""}`}
+      >
+      ◯
+      </button>
     </div>
   )
 }

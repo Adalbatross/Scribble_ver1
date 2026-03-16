@@ -20,7 +20,7 @@ function Home() {
     <div style={{ textAlign: "center", marginTop: "100px" }}>
       <h1>Lets Collab</h1>
 
-      <button  className="text-red-100 " onClick={createBoard}>
+      <button  className="text-red-700 " onClick={createBoard}>
         Create New Board
       </button>
 

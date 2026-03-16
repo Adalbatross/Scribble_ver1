@@ -101,6 +101,63 @@ const Board = () => {
         ctx.restore() 
   
     }
+    const drawStroke = (ctx, stroke) =>{
+        if (!stroke.points.length) return
+        ctx.lineWidth = stroke.width
+        ctx.strokeStyle = stroke.color
+        
+        
+        if (stroke.tool === "eraser") {
+            ctx.globalCompositeOperation = "destination-out"
+        } else {
+            ctx.globalCompositeOperation = "source-over"
+        }
+        if (stroke.tool == "pen" || stroke.tool == "eraser"){
+            ctx.beginPath()
+            const first = stroke.points[0]
+            ctx.moveTo(first.x, first.y)
+            
+            for (let i = 1; i < stroke.points.length; i++) {
+                const point = stroke.points[i]
+                ctx.lineTo(point.x, point.y)
+            }
+            
+            ctx.stroke()
+        }
+        if (stroke.tool === "rect"){
+            if(stroke.points.length < 2) return 
+            const p1 = stroke.points[0]
+            const p2 = stroke.points[1]
+            
+            const width = p2.x -p1.x
+            const height = p2.y -p1.y
+
+            ctx.beginPath()
+            ctx.rect(p1.x, p1.y, width, height)
+            ctx.stroke()
+        }
+        if(stroke.tool === "line" && stroke.points.length >= 2){
+            const p1 = stroke.points[0]
+            const p2 = stroke.points[1]
+
+            ctx.beginPath()
+            ctx.moveTo(p1.x, p1.y)
+            ctx.lineTo(p2.x, p2.y)
+            ctx.stroke()
+        }
+        if (stroke.tool === "circle" && stroke.points.length>=2){
+            const p1 = stroke.points[0]
+            const p2 = stroke.points[1]
+
+            const dx = p2.x - p1.x
+            const dy = p2.y - p1.y
+
+            const radius  = Math.sqrt(dx*dx + dy*dy)
+            ctx.beginPath()
+            ctx.arc(p1.x, p1.y, radius, 0, Math.PI * 2)
+            ctx.stroke()
+        }
+    }
     const redraw = () => {
         const canvas = canvasRef.current
         const ctx = canvas.getContext("2d")
@@ -113,29 +170,11 @@ const Board = () => {
         ctx.translate(offsetXRef.current, offsetYRef.current)
         ctx.scale(scaleRef.current, scaleRef.current)
         strokeRef.current.forEach(stroke => {
-            
-            if (!stroke.points.length) return
-            ctx.lineWidth = stroke.width
-            ctx.strokeStyle = stroke.color
-            
-            ctx.beginPath()
-            
-            if (stroke.tool === "eraser") {
-                ctx.globalCompositeOperation = "destination-out"
-            } else {
-                ctx.globalCompositeOperation = "source-over"
-            }
-            
-            const first = stroke.points[0]
-            ctx.moveTo(first.x, first.y)
-            
-            for (let i = 1; i < stroke.points.length; i++) {
-                const point = stroke.points[i]
-                ctx.lineTo(point.x, point.y)
-            }
-            
-            ctx.stroke()
+            drawStroke(ctx, stroke)
         })
+        if(currentStrokeRef.current){
+            drawStroke(ctx, currentStrokeRef.current)
+        }
         ctx.restore()
         ctx.globalCompositeOperation = "source-over"
     }
@@ -251,6 +290,13 @@ const Board = () => {
         const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current;
         const stroke = currentStrokeRef.current
         if(!stroke) return 
+        if(stroke.tool === "rect" || stroke.tool === "line" || stroke.tool === "circle"){
+            stroke.points[1] = {x,y}
+            drawGrid()
+            redraw()
+
+            return
+        }
         const lastPoint = stroke.points[stroke.points.length - 1]
         ctx.save()
         ctx.translate(offsetXRef.current, offsetYRef.current)
@@ -292,6 +338,9 @@ const Board = () => {
             color:color,
             width: brushSize,
             points: [{x,y}]
+        }
+        if(tool === "rect" || tool === "line" || tool === "circle"){
+            currentStrokeRef.current.points.push({x,y})
         }
         setIsDrawing(true)
 
