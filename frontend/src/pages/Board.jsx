@@ -10,6 +10,7 @@ const Board = () => {
     const MIN_ZOOM = 0.1
     const MAX_ZOOM = 10
     const gridCanvasRef = useRef(null)
+    const lastMouseRef = useRef({x:0, y:0})
     const baseGridSize = 50
     const {id} = useParams()
     console.log(`Boards's ID : ${id}`) 
@@ -25,6 +26,7 @@ const Board = () => {
     const spacePressRef = useRef(false)
     const currentStrokeRef = useRef(null)
     const userIdRef = useRef(null)
+    const selectedStrokeRef  = useRef(null)
     const [tool, setTool] = useState("pen")
     const [color, setColor] = useState("black")
     const [brushSize, setBrushSize] = useState(5)
@@ -37,6 +39,27 @@ const Board = () => {
             localStorage.setItem("scribble-user-id", newId)
             userIdRef.current = newId
         }
+    }
+    const getStrokeAtPoint = (x,y) =>{
+        for (let i  = strokeRef.current.length -1; i>=0; i--){
+            const stroke = strokeRef.current[i]
+            if(stroke.tool === "rect" && stroke.points.length >=2){
+                const p1 = stroke.points[0]
+                const p2 = stroke.points[1]
+
+                const minX = Math.min(p1.x, p2.x)
+                const maxX = Math.max(p1.x, p2.x)
+                
+                const minY = Math.min(p1.y, p2.y)
+                const maxY = Math.max(p1.y, p2.y)
+
+                if(x>= minX && x<=maxX && y>=minY && y<= maxY){
+                    return stroke
+                }
+
+            }
+        }
+        return null
     }
     const drawGrid = ()=> {
         const canvas = gridCanvasRef.current
@@ -158,6 +181,29 @@ const Board = () => {
             ctx.stroke()
         }
     }
+    const drawSelectionBox = (ctx, stroke) =>{
+        if(!stroke || stroke.points.length < 2) return 
+        const p1 = stroke.points[0]
+        const p2 = stroke.points[1]
+
+        const minX = Math.min(p1.x, p2.x)
+        const maxX = Math.max(p1.x, p2.x)
+
+        const minY = Math.min(p1.y, p2.y)
+        const maxY = Math.max(p1.y, p2.y)
+
+        const width = maxX - minX
+        const height = maxY - minY
+
+        ctx.save()
+
+        ctx.strokeStyle = "#1E90FF"
+        ctx.lineWidth  = 2 / scaleRef.current
+        ctx.setLineDash([8,4])
+
+        ctx.strokeRect(minX , minY, width, height)
+        ctx.restore()
+    }
     const redraw = () => {
         const canvas = canvasRef.current
         const ctx = canvas.getContext("2d")
@@ -172,6 +218,9 @@ const Board = () => {
         strokeRef.current.forEach(stroke => {
             drawStroke(ctx, stroke)
         })
+        if(selectedStrokeRef.current){
+            drawSelectionBox(ctx, selectedStrokeRef.current)
+        }
         if(currentStrokeRef.current){
             drawStroke(ctx, currentStrokeRef.current)
         }
@@ -212,6 +261,14 @@ const Board = () => {
         socketRef.current.on("stroke-complete", (stroke)=>{
             strokeRef.current.push(stroke)
             redraw()
+        })
+        socketRef.current.on("stroke-move", (updatedStroke)=>{
+            const index = strokeRef.current.findIndex(s=> s.id === updatedStroke.id)
+            if(index !== -1){
+                strokeRef.current[index] = updatedStroke
+                drawGrid()
+                redraw()
+            }
         })
         socketRef.current.on("load-history", (strokes)=>{
             strokeRef.current = strokes
@@ -289,6 +346,25 @@ const Board = () => {
         const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current;
         const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current;
         const stroke = currentStrokeRef.current
+        if(tool === "select" && selectedStrokeRef.current && isDrawing){
+
+            const stroke = selectedStrokeRef.current
+
+            const dx = x - lastMouseRef.current.x
+            const dy = y - lastMouseRef.current.y
+
+            stroke.points.forEach(p => {
+                p.x += dx
+                p.y += dy
+            })
+
+            lastMouseRef.current = { x, y }
+
+            drawGrid()
+            redraw()
+
+            return
+        }
         if(!stroke) return 
         if(stroke.tool === "rect" || stroke.tool === "line" || stroke.tool === "circle"){
             stroke.points[1] = {x,y}
@@ -331,7 +407,18 @@ const Board = () => {
         const rect = canvas.getBoundingClientRect()
         const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current
         const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current
-
+        if(tool === "select"){
+            const stroke = getStrokeAtPoint(x,y)
+            if(stroke){
+                selectedStrokeRef.current = stroke
+                lastMouseRef.current = {x,y}
+                setIsDrawing(true)
+            }else{
+                selectedStrokeRef.current = null
+                redraw()
+            }
+            return
+        }
         currentStrokeRef.current = {
             id: crypto.randomUUID(),
             tool: tool,
@@ -350,6 +437,15 @@ const Board = () => {
         if(isPanningRef.current){
             isPanningRef.current = false
             return 
+        }
+        if(tool === "select"){
+            if(selectedStrokeRef.current){
+                socketRef.current.emit("stroke-move", selectedStrokeRef.current)
+            }
+            selectedStrokeRef.current = null
+            setIsDrawing(false)
+
+            return
         }
         if(!currentStrokeRef.current) return
         strokeRef.current.push(currentStrokeRef.current)

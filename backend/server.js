@@ -45,7 +45,7 @@ io.on("connection", (socket) => {
 
         rooms[roomId].push(newStroke)
 
-        io.to(roomId).emit("stroke-complete", newStroke)
+        socket.broadcast.to(roomId).emit("stroke-complete", newStroke)
     })
     socket.on("undo", ()=>{
         const roomId = socket.data.roomId
@@ -64,7 +64,16 @@ io.on("connection", (socket) => {
             }
         }
     })
+    socket.on("stroke-move", (stroke)=>{
+        const roomId = socket.data.roomId
+        if(!roomId || !rooms[roomId]) return 
 
+        const index = rooms[roomId].findIndex(s=> s.id === stroke.id)
+        if(index !== -1){
+            rooms[roomId][index] = stroke
+        }
+        socket.broadcast.to(roomId).emit("stroke-move", stroke)
+    })
     socket.on("disconnect", () => {
         console.log("User disconnected:", socket.id)
     })

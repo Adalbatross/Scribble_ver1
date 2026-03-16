@@ -62,6 +62,12 @@ const Toolbar = ({ tool, setTool, onUndo, color, setColor, brushSize, setBrushSi
       >
       ◯
       </button>
+      <button
+        onClick={() => setTool("select")}
+        className={`w-10 h-10 rounded-md border hover:bg-gray-200 ${tool === "select" ? "bg-gray-300" : ""}`}
+      >
+        🔲
+      </button>
     </div>
   )
 }
