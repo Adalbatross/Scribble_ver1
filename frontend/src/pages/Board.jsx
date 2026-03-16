@@ -200,7 +200,6 @@ const Board = () => {
         ctx.strokeStyle = "#1E90FF"
         ctx.lineWidth  = 2 / scaleRef.current
         ctx.setLineDash([8,4])
-
         ctx.strokeRect(minX , minY, width, height)
         ctx.restore()
     }
@@ -277,6 +276,7 @@ const Board = () => {
         })
         socketRef.current.on("undo", (strokeId)=>{
             strokeRef.current = strokeRef.current.filter(s=> s.id !== strokeId)
+            drawGrid()
             redraw()
         })
         const handleWheel  = (e)=>{
@@ -444,6 +444,8 @@ const Board = () => {
             }
             selectedStrokeRef.current = null
             setIsDrawing(false)
+            drawGrid()
+            redraw()
 
             return
         }
