@@ -30,6 +30,7 @@ const Board = () => {
     const [tool, setTool] = useState("pen")
     const [color, setColor] = useState("black")
     const [brushSize, setBrushSize] = useState(5)
+    const activeHandleRef = useRef(null)
     if(! userIdRef.current){
         const existing = localStorage.getItem("scribble-user-id")
         if(existing){
@@ -181,6 +182,35 @@ const Board = () => {
             ctx.stroke()
         }
     }
+    const getHandleAtPoint = (x, y, stroke) => {
+        if(!stroke || stroke.points.length < 2) return null
+
+        const p1 = stroke.points[0]
+        const p2 = stroke.points[1]
+
+        const minX = Math.min(p1.x, p2.x)
+        const maxX = Math.max(p1.x, p2.x)
+        const minY = Math.min(p1.y, p2.y)
+        const maxY = Math.max(p1.y, p2.y)
+
+        const corners = [
+            { x: minX, y: minY, xPoint: p1.x <= p2.x ? "p1" : "p2", yPoint: p1.y <= p2.y ? "p1" : "p2" },
+            { x: maxX, y: minY, xPoint: p1.x >= p2.x ? "p1" : "p2", yPoint: p1.y <= p2.y ? "p1" : "p2" },
+            { x: minX, y: maxY, xPoint: p1.x <= p2.x ? "p1" : "p2", yPoint: p1.y >= p2.y ? "p1" : "p2" },
+            { x: maxX, y: maxY, xPoint: p1.x >= p2.x ? "p1" : "p2", yPoint: p1.y >= p2.y ? "p1" : "p2" },
+        ]
+
+        const radius = 10 / scaleRef.current
+
+        for(const corner of corners){
+            const dx = x - corner.x
+            const dy = y - corner.y
+            if(Math.sqrt(dx*dx + dy*dy) < radius){
+                return { xPoint: corner.xPoint, yPoint: corner.yPoint }
+            }
+        }
+        return null
+    }
     const drawSelectionBox = (ctx, stroke) =>{
         if(!stroke || stroke.points.length < 2) return 
         const p1 = stroke.points[0]
@@ -201,6 +231,23 @@ const Board = () => {
         ctx.lineWidth  = 2 / scaleRef.current
         ctx.setLineDash([8,4])
         ctx.strokeRect(minX , minY, width, height)
+
+        const handleSize = 6 / scaleRef.current
+
+        const corners = [
+            [minX, minY],
+            [maxX, minY],
+            [minX, maxY],
+            [maxX, maxY],
+        ]
+
+        corners.forEach(([x,y])=>{
+            ctx.beginPath()
+            ctx.arc(x, y , handleSize , 0 , Math.PI * 2)
+            ctx.fillStyle = "#0077FF"
+            ctx.fill()
+        })
+
         ctx.restore()
     }
     const redraw = () => {
@@ -346,10 +393,33 @@ const Board = () => {
         const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current;
         const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current;
         const stroke = currentStrokeRef.current
-        if(tool === "select" && selectedStrokeRef.current && isDrawing){
+
+        if(tool === "select" && selectedStrokeRef.current && isDrawing && activeHandleRef.current){
+            const stroke = selectedStrokeRef.current
+            const p1 = stroke.points[0]
+            const p2 = stroke.points[1]
+            const handle = activeHandleRef.current
+
+            // snapshot which point owned which axis AT mousedown time
+            // tl: p_smallX.x = x,  p_smallY.y = y
+            // we need to remember this mapping — so store it at mousedown
+
+            // simplest approach: store the actual point references at mousedown
+            // activeHandleRef stores {xPoint, yPoint} instead of a string
+
+            p1.x = activeHandleRef.current.xPoint === "p1" ? x : p1.x
+            p2.x = activeHandleRef.current.xPoint === "p2" ? x : p2.x
+            p1.y = activeHandleRef.current.yPoint === "p1" ? y : p1.y
+            p2.y = activeHandleRef.current.yPoint === "p2" ? y : p2.y
+
+            drawGrid()
+            redraw()
+            return
+        }
+        
+        if(tool === "select" && selectedStrokeRef.current && isDrawing && !activeHandleRef.current){
 
             const stroke = selectedStrokeRef.current
-
             const dx = x - lastMouseRef.current.x
             const dy = y - lastMouseRef.current.y
 
@@ -410,10 +480,17 @@ const Board = () => {
         if(tool === "select"){
             const stroke = getStrokeAtPoint(x,y)
             if(stroke){
+                const handle = getHandleAtPoint(x, y, stroke)
+                if(handle){
+                    activeHandleRef.current = handle  // still "tl/tr/bl/br"
+                } else {
+                    activeHandleRef.current = null
+                }
                 selectedStrokeRef.current = stroke
-                lastMouseRef.current = {x,y}
+                lastMouseRef.current = {x, y}
                 setIsDrawing(true)
-            }else{
+            }
+            else{
                 selectedStrokeRef.current = null
                 redraw()
             }
@@ -441,8 +518,9 @@ const Board = () => {
         if(tool === "select"){
             if(selectedStrokeRef.current){
                 socketRef.current.emit("stroke-move", selectedStrokeRef.current)
+                // selectedStrokeRef.current = null
             }
-            selectedStrokeRef.current = null
+            activeHandleRef.current = null
             setIsDrawing(false)
             drawGrid()
             redraw()
