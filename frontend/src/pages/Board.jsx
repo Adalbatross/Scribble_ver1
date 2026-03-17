@@ -183,7 +183,7 @@ const Board = () => {
         }
     }
     const getHandleAtPoint = (x, y, stroke) => {
-        if(!stroke || stroke.points.length < 2) return null
+        if (!stroke || stroke.points.length < 2) return null
 
         const p1 = stroke.points[0]
         const p2 = stroke.points[1]
@@ -193,22 +193,34 @@ const Board = () => {
         const minY = Math.min(p1.y, p2.y)
         const maxY = Math.max(p1.y, p2.y)
 
+        const radius = Math.max(6 / scaleRef.current, 4)
+
         const corners = [
-            { x: minX, y: minY, xPoint: p1.x <= p2.x ? "p1" : "p2", yPoint: p1.y <= p2.y ? "p1" : "p2" },
-            { x: maxX, y: minY, xPoint: p1.x >= p2.x ? "p1" : "p2", yPoint: p1.y <= p2.y ? "p1" : "p2" },
-            { x: minX, y: maxY, xPoint: p1.x <= p2.x ? "p1" : "p2", yPoint: p1.y >= p2.y ? "p1" : "p2" },
-            { x: maxX, y: maxY, xPoint: p1.x >= p2.x ? "p1" : "p2", yPoint: p1.y >= p2.y ? "p1" : "p2" },
+            { key: "tl", x: minX, y: minY },
+            { key: "tr", x: maxX, y: minY },
+            { key: "bl", x: minX, y: maxY },
+            { key: "br", x: maxX, y: maxY },
         ]
 
-        const radius = 10 / scaleRef.current
+        for (const c of corners) {
+            // base radius
+            let r = radius
 
-        for(const corner of corners){
-            const dx = x - corner.x
-            const dy = y - corner.y
-            if(Math.sqrt(dx*dx + dy*dy) < radius){
-                return { xPoint: corner.xPoint, yPoint: corner.yPoint }
+            // extra padding for left handles
+            if (c.key === "tl" || c.key === "bl") {
+                r = radius * 1.8   // increase sensitivity
+            }
+
+            if (
+                x >= c.x - r &&
+                x <= c.x + r &&
+                y >= c.y - r &&
+                y <= c.y + r
+            ) {
+                return c.key
             }
         }
+
         return null
     }
     const drawSelectionBox = (ctx, stroke) =>{
@@ -394,23 +406,24 @@ const Board = () => {
         const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current;
         const stroke = currentStrokeRef.current
 
-        if(tool === "select" && selectedStrokeRef.current && isDrawing && activeHandleRef.current){
+        if (tool === "select" && selectedStrokeRef.current && isDrawing && activeHandleRef.current) {
             const stroke = selectedStrokeRef.current
+            const { corner, anchor } = activeHandleRef.current
+
             const p1 = stroke.points[0]
             const p2 = stroke.points[1]
-            const handle = activeHandleRef.current
 
-            // snapshot which point owned which axis AT mousedown time
-            // tl: p_smallX.x = x,  p_smallY.y = y
-            // we need to remember this mapping — so store it at mousedown
+            // Always recompute from anchor → cursor
+            const newMinX = Math.min(anchor.x, x)
+            const newMaxX = Math.max(anchor.x, x)
+            const newMinY = Math.min(anchor.y, y)
+            const newMaxY = Math.max(anchor.y, y)
 
-            // simplest approach: store the actual point references at mousedown
-            // activeHandleRef stores {xPoint, yPoint} instead of a string
-
-            p1.x = activeHandleRef.current.xPoint === "p1" ? x : p1.x
-            p2.x = activeHandleRef.current.xPoint === "p2" ? x : p2.x
-            p1.y = activeHandleRef.current.yPoint === "p1" ? y : p1.y
-            p2.y = activeHandleRef.current.yPoint === "p2" ? y : p2.y
+            // Assign consistently
+            p1.x = newMinX
+            p1.y = newMinY
+            p2.x = newMaxX
+            p2.y = newMaxY
 
             drawGrid()
             redraw()
@@ -481,9 +494,28 @@ const Board = () => {
             const stroke = getStrokeAtPoint(x,y)
             if(stroke){
                 const handle = getHandleAtPoint(x, y, stroke)
-                if(handle){
-                    activeHandleRef.current = handle  // still "tl/tr/bl/br"
-                } else {
+            if (handle) {
+                const p1 = stroke.points[0]
+                const p2 = stroke.points[1]
+
+                const minX = Math.min(p1.x, p2.x)
+                const maxX = Math.max(p1.x, p2.x)
+                const minY = Math.min(p1.y, p2.y)
+                const maxY = Math.max(p1.y, p2.y)
+
+                let anchor = {}
+
+                if (handle === "tl") anchor = { x: maxX, y: maxY }
+                if (handle === "tr") anchor = { x: minX, y: maxY }
+                if (handle === "bl") anchor = { x: maxX, y: minY }
+                if (handle === "br") anchor = { x: minX, y: minY }
+
+                activeHandleRef.current = {
+                    corner: handle,
+                    anchor
+                }
+            }
+                else {
                     activeHandleRef.current = null
                 }
                 selectedStrokeRef.current = stroke

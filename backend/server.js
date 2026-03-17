@@ -71,7 +71,7 @@ io.on("connection", (socket) => {
                 type: "move",
                 userId,           
                 strokeId: stroke.id,
-                previousPoints    
+                previousPoints: structuredClone(previousPoints)    
             })
         }
 
