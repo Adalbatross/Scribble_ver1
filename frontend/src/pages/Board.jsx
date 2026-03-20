@@ -59,6 +59,46 @@ const Board = () => {
                 }
 
             }
+            if (stroke.tool === "line" && stroke.points.length >= 2) {
+                const p1 = stroke.points[0]
+                const p2 = stroke.points[1]
+
+                const A = x - p1.x
+                const B = y - p1.y
+                const C = p2.x - p1.x
+                const D = p2.y - p1.y
+
+                const dot = A * C + B * D
+                const lenSq = C * C + D * D
+                let param = lenSq !== 0 ? dot / lenSq : -1
+
+                let nearX, nearY
+                if (param < 0) { nearX = p1.x; nearY = p1.y }
+                else if (param > 1) { nearX = p2.x; nearY = p2.y }
+                else {
+                    nearX = p1.x + param * C
+                    nearY = p1.y + param * D
+                }
+
+                const dist = Math.sqrt((x - nearX) ** 2 + (y - nearY) ** 2)
+
+                if (dist <= 10 / scaleRef.current) return stroke
+            }
+
+            if (stroke.tool === "circle" && stroke.points.length >= 2) {
+                const p1 = stroke.points[0]
+                const p2 = stroke.points[1]
+
+                const dx = p2.x - p1.x
+                const dy = p2.y - p1.y
+                const radius = Math.sqrt(dx*dx + dy*dy)
+
+                const dist = Math.sqrt((x - p1.x)**2 + (y - p1.y)**2)
+
+                if ( dist <= radius + 10 / scaleRef.current) {
+                    return stroke
+                }
+            }
         }
         return null
     }
@@ -185,80 +225,128 @@ const Board = () => {
     const getHandleAtPoint = (x, y, stroke) => {
         if (!stroke || stroke.points.length < 2) return null
 
-        const p1 = stroke.points[0]
-        const p2 = stroke.points[1]
+        const radius = 10 / scaleRef.current
 
-        const minX = Math.min(p1.x, p2.x)
-        const maxX = Math.max(p1.x, p2.x)
-        const minY = Math.min(p1.y, p2.y)
-        const maxY = Math.max(p1.y, p2.y)
+        if (stroke.tool === "rect") {
+            const p1 = stroke.points[0]
+            const p2 = stroke.points[1]
 
-        const radius = Math.max(6 / scaleRef.current, 4)
+            const minX = Math.min(p1.x, p2.x)
+            const maxX = Math.max(p1.x, p2.x)
+            const minY = Math.min(p1.y, p2.y)
+            const maxY = Math.max(p1.y, p2.y)
 
-        const corners = [
-            { key: "tl", x: minX, y: minY },
-            { key: "tr", x: maxX, y: minY },
-            { key: "bl", x: minX, y: maxY },
-            { key: "br", x: maxX, y: maxY },
-        ]
+            const corners = [
+                { key: "tl", x: minX, y: minY },
+                { key: "tr", x: maxX, y: minY },
+                { key: "bl", x: minX, y: maxY },
+                { key: "br", x: maxX, y: maxY },
+            ]
 
-        for (const c of corners) {
-            // base radius
-            let r = radius
-
-            // extra padding for left handles
-            if (c.key === "tl" || c.key === "bl") {
-                r = radius * 1.8   // increase sensitivity
+            for (const c of corners) {
+                if (Math.hypot(x - c.x, y - c.y) <= radius) return c.key
             }
+        }
 
-            if (
-                x >= c.x - r &&
-                x <= c.x + r &&
-                y >= c.y - r &&
-                y <= c.y + r
-            ) {
-                return c.key
-            }
+        if (stroke.tool === "line") {
+            const [p1, p2] = stroke.points
+
+            if (Math.hypot(x - p1.x, y - p1.y) <= radius) return "start"
+            if (Math.hypot(x - p2.x, y - p2.y) <= radius) return "end"
+        }
+
+        if (stroke.tool === "circle") {
+            const [p1, p2] = stroke.points
+
+            if (Math.hypot(x - p1.x, y - p1.y) <= radius) return "center"
+            if (Math.hypot(x - p2.x, y - p2.y) <= radius) return "radius"
         }
 
         return null
     }
     const drawSelectionBox = (ctx, stroke) =>{
         if(!stroke || stroke.points.length < 2) return 
-        const p1 = stroke.points[0]
-        const p2 = stroke.points[1]
-
-        const minX = Math.min(p1.x, p2.x)
-        const maxX = Math.max(p1.x, p2.x)
-
-        const minY = Math.min(p1.y, p2.y)
-        const maxY = Math.max(p1.y, p2.y)
-
-        const width = maxX - minX
-        const height = maxY - minY
 
         ctx.save()
-
         ctx.strokeStyle = "#1E90FF"
         ctx.lineWidth  = 2 / scaleRef.current
         ctx.setLineDash([8,4])
-        ctx.strokeRect(minX , minY, width, height)
 
         const handleSize = 6 / scaleRef.current
 
-        const corners = [
-            [minX, minY],
-            [maxX, minY],
-            [minX, maxY],
-            [maxX, maxY],
-        ]
+        //  RECT
+        if (stroke.tool === "rect") {
+            const p1 = stroke.points[0]
+            const p2 = stroke.points[1]
 
-        corners.forEach(([x,y])=>{
+            const minX = Math.min(p1.x, p2.x)
+            const maxX = Math.max(p1.x, p2.x)
+            const minY = Math.min(p1.y, p2.y)
+            const maxY = Math.max(p1.y, p2.y)
+
+            ctx.strokeRect(minX , minY, maxX - minX, maxY - minY)
+
+            const corners = [
+                [minX, minY],
+                [maxX, minY],
+                [minX, maxY],
+                [maxX, maxY],
+            ]
+
+            corners.forEach(([x,y])=>{
+                ctx.beginPath()
+                ctx.arc(x, y , handleSize , 0 , Math.PI * 2)
+                ctx.fillStyle = "#0077FF"
+                ctx.fill()
+            })
+        }
+
+        //  LINE
+        if (stroke.tool === "line") {
+            const p1 = stroke.points[0]
+            const p2 = stroke.points[1]
+
+            // dashed line overlay
             ctx.beginPath()
-            ctx.arc(x, y , handleSize , 0 , Math.PI * 2)
+            ctx.moveTo(p1.x, p1.y)
+            ctx.lineTo(p2.x, p2.y)
+            ctx.stroke()
+
+            // handles at both ends
+            ;[p1, p2].forEach(p => {
+                ctx.beginPath()
+                ctx.arc(p.x, p.y, handleSize, 0, Math.PI * 2)
+                ctx.fillStyle = "#0077FF"
+                ctx.fill()
+            })
+        }
+
+        //  CIRCLE
+        if (stroke.tool === "circle") {
+            const p1 = stroke.points[0] // center
+            const p2 = stroke.points[1] // radius point
+
+            const dx = p2.x - p1.x
+            const dy = p2.y - p1.y
+            const radius = Math.sqrt(dx*dx + dy*dy)
+
+            // dashed circle
+            ctx.beginPath()
+            ctx.arc(p1.x, p1.y, radius, 0, Math.PI * 2)
+            ctx.stroke()
+
+            // center handle
+            ctx.beginPath()
+            ctx.arc(p1.x, p1.y, handleSize, 0, Math.PI * 2)
             ctx.fillStyle = "#0077FF"
             ctx.fill()
-        })
+
+            // radius handle
+            ctx.beginPath()
+            ctx.arc(p2.x, p2.y, handleSize, 0, Math.PI * 2)
+            ctx.fillStyle = "#0077FF"
+            ctx.fill()
+        }
 
         ctx.restore()
     }
@@ -407,26 +495,67 @@ const Board = () => {
         const stroke = currentStrokeRef.current
 
         if (tool === "select" && selectedStrokeRef.current && isDrawing && activeHandleRef.current) {
+
             const stroke = selectedStrokeRef.current
             const { corner, anchor } = activeHandleRef.current
 
-            const p1 = stroke.points[0]
-            const p2 = stroke.points[1]
+            // 🟦 RECT (keep your existing logic)
+            if (stroke.tool === "rect") {
+                const p1 = stroke.points[0]
+                const p2 = stroke.points[1]
 
-            // Always recompute from anchor → cursor
-            const newMinX = Math.min(anchor.x, x)
-            const newMaxX = Math.max(anchor.x, x)
-            const newMinY = Math.min(anchor.y, y)
-            const newMaxY = Math.max(anchor.y, y)
+                const newMinX = Math.min(anchor.x, x)
+                const newMaxX = Math.max(anchor.x, x)
+                const newMinY = Math.min(anchor.y, y)
+                const newMaxY = Math.max(anchor.y, y)
 
-            // Assign consistently
-            p1.x = newMinX
-            p1.y = newMinY
-            p2.x = newMaxX
-            p2.y = newMaxY
+                p1.x = newMinX
+                p1.y = newMinY
+                p2.x = newMaxX
+                p2.y = newMaxY
+            }
 
-            drawGrid()
-            redraw()
+            // 🟩 LINE RESIZE
+            if (stroke.tool === "line") {
+                const p1 = stroke.points[0]
+                const p2 = stroke.points[1]
+
+                if (corner === "start") {
+                    p1.x = x
+                    p1.y = y
+                }
+
+                if (corner === "end") {
+                    p2.x = x
+                    p2.y = y
+                }
+            }
+
+            // 🟣 CIRCLE RESIZE
+            if (stroke.tool === "circle") {
+                const center = stroke.points[0]
+                const radiusPoint = stroke.points[1]
+
+                // resize radius
+                if (corner === "radius") {
+                    radiusPoint.x = x
+                    radiusPoint.y = y
+                }
+
+                // move center (VERY IMPORTANT)
+                if (corner === "center") {
+                    const dx = x - center.x
+                    const dy = y - center.y
+
+                    center.x = x
+                    center.y = y
+
+                    radiusPoint.x += dx
+                    radiusPoint.y += dy
+                }
+            }
+
+            redraw()   // 🚀 no need drawGrid
             return
         }
         
