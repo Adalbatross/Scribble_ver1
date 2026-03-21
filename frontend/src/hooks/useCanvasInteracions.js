@@ -1,0 +1,356 @@
+import { useRef, useState } from "react"
+import { 
+    drawStroke, 
+    drawSelectionBox, 
+    getStrokeAtPoint, 
+    getHandleAtPoint 
+} from "../utils/canvasUtils"
+
+export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGrid,spacePressRef) => {
+
+    const canvasRef = useRef(null)
+    const gridCanvasRef = useRef(null)
+    const MIN_ZOOM = 0.1
+    const MAX_ZOOM = 10
+    const strokeRef = useRef([])
+    const currentStrokeRef = useRef(null)
+    const selectedStrokeRef = useRef(null)
+    const activeHandleRef = useRef(null)
+    const lastMouseRef = useRef({ x: 0, y: 0 })
+    const hoveredHandleRef = useRef(null)
+    const hoveredStrokeRef = useRef(null)
+    const scaleRef = useRef(1)
+    const offsetXRef = useRef(0)
+    const offsetYRef = useRef(0)
+
+    const isPanningRef = useRef(false)
+    const panStartRef = useRef({ x: 0, y: 0 })
+    // const spacePressRef = useRef(false)
+
+    const [isDrawing, setIsDrawing] = useState(false)
+    const updateCursor = (handle) => {
+        const canvas = canvasRef.current
+
+        if (!canvas) return
+
+        if (!handle) {
+            canvas.style.cursor = tool === "select" ? "pointer" : "crosshair"
+            return
+        }
+
+        if (handle === "tl" || handle === "br") {
+            canvas.style.cursor = "nwse-resize"
+        } else if (handle === "tr" || handle === "bl") {
+            canvas.style.cursor = "nesw-resize"
+        } else if (handle === "start" || handle === "end") {
+            canvas.style.cursor = "pointer"
+        } else if (handle === "center") {
+            canvas.style.cursor = "move"
+        } else {
+            canvas.style.cursor = "crosshair"
+    }
+}
+
+    // redraw function that redraws the canvas everytime
+
+    const redraw = () => {
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext("2d")
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.save()
+    ctx.lineWidth = 5
+    ctx.lineCap = "round"
+    
+    ctx.translate(offsetXRef.current, offsetYRef.current)
+    ctx.scale(scaleRef.current, scaleRef.current)
+    strokeRef.current.forEach(stroke => {
+        drawStroke(ctx, stroke, scaleRef.current)
+    })
+    if(selectedStrokeRef.current){
+        drawSelectionBox(ctx, selectedStrokeRef.current, scaleRef.current)
+    }
+    if(currentStrokeRef.current){
+        drawStroke(ctx, currentStrokeRef.current, scaleRef.current)
+    }
+    ctx.restore()
+    ctx.globalCompositeOperation = "source-over"
+    }
+
+    // handle mouse move hook
+
+    const handleMouseMove = (e) => {
+        if(isPanningRef.current){
+            const dx = e.clientX - panStartRef.current.x
+            const dy = e.clientY - panStartRef.current.y
+            offsetXRef.current += dx
+            offsetYRef.current += dy
+
+            panStartRef.current = {
+                x: e.clientX,
+                y: e.clientY
+            }
+            drawGrid()
+            redraw()
+            return 
+        }
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const ctx = canvas.getContext("2d");
+        const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current;
+        const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current;
+        const stroke = currentStrokeRef.current
+        if(!isDrawing) {
+            let hoveredHandle = null
+            let hoveredStroke = null
+
+            for(let i = strokeRef.current.length - 1; i>=0; i--){
+                const s = strokeRef.current[i]
+                const handle = getHandleAtPoint(x,y,s,scaleRef.current)
+
+                if(handle){
+                    hoveredHandle = handle
+                    hoveredStroke = s
+                    break
+                }
+            }
+            hoveredHandleRef.current = hoveredHandle
+            hoveredStrokeRef.current = hoveredStroke
+
+            updateCursor(hoveredHandle)
+        }
+        if (tool === "select" && selectedStrokeRef.current && isDrawing && activeHandleRef.current) {
+            
+            const stroke = selectedStrokeRef.current
+            const { corner, anchor } = activeHandleRef.current
+            
+            // 🟦 RECT (keep your existing logic)
+            if (stroke.tool === "rect") {
+                const p1 = stroke.points[0]
+                const p2 = stroke.points[1]
+
+                const newMinX = Math.min(anchor.x, x)
+                const newMaxX = Math.max(anchor.x, x)
+                const newMinY = Math.min(anchor.y, y)
+                const newMaxY = Math.max(anchor.y, y)
+
+                p1.x = newMinX
+                p1.y = newMinY
+                p2.x = newMaxX
+                p2.y = newMaxY
+            }
+
+            // 🟩 LINE RESIZE
+            if (stroke.tool === "line") {
+                const p1 = stroke.points[0]
+                const p2 = stroke.points[1]
+
+                if (corner === "start") {
+                    p1.x = x
+                    p1.y = y
+                }
+
+                if (corner === "end") {
+                    p2.x = x
+                    p2.y = y
+                }
+            }
+
+            // 🟣 CIRCLE RESIZE
+            if (stroke.tool === "circle") {
+                const center = stroke.points[0]
+                const radiusPoint = stroke.points[1]
+
+                // resize radius
+                if (corner === "radius") {
+                    radiusPoint.x = x
+                    radiusPoint.y = y
+                }
+
+                // move center (VERY IMPORTANT)
+                if (corner === "center") {
+                    const dx = x - center.x
+                    const dy = y - center.y
+
+                    center.x = x
+                    center.y = y
+
+                    radiusPoint.x += dx
+                    radiusPoint.y += dy
+                }
+            }
+
+            redraw()   // 🚀 no need drawGrid
+            return
+        }
+        
+        if(tool === "select" && selectedStrokeRef.current && isDrawing && !activeHandleRef.current){
+
+            const stroke = selectedStrokeRef.current
+            const dx = x - lastMouseRef.current.x
+            const dy = y - lastMouseRef.current.y
+
+            stroke.points.forEach(p => {
+                p.x += dx
+                p.y += dy
+            })
+
+            lastMouseRef.current = { x, y }
+
+            drawGrid()
+            redraw()
+
+            return
+        }
+        if(!stroke) return 
+        if(stroke.tool === "rect" || stroke.tool === "line" || stroke.tool === "circle"){
+            stroke.points[1] = {x,y}
+            drawGrid()
+            redraw()
+
+            return
+        }
+        const lastPoint = stroke.points[stroke.points.length - 1]
+        ctx.save()
+        ctx.translate(offsetXRef.current, offsetYRef.current)
+        ctx.scale(scaleRef.current, scaleRef.current)
+        ctx.lineWidth = stroke.width
+        ctx.strokeStyle = stroke.color
+        if(stroke.tool === "eraser"){
+            ctx.globalCompositeOperation = "destination-out"
+        }else{
+            ctx.globalCompositeOperation = "source-over"
+        }
+        ctx.beginPath()
+        ctx.moveTo(lastPoint.x, lastPoint.y)
+        ctx.lineTo(x,y)
+        ctx.stroke()
+
+        ctx.restore()
+
+        stroke.points.push({x,y})
+
+    }
+
+    // handle mouse down hook
+
+    const handleMouseDown = (e) => {
+        if(spacePressRef.current){
+            isPanningRef.current = true
+            panStartRef.current = {
+                x: e.clientX,
+                y: e.clientY
+            }
+            return 
+        }
+        const canvas = canvasRef.current
+        const rect = canvas.getBoundingClientRect()
+        const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current
+        const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current
+        if (tool === "select") {
+
+            // ✅ PRIORITY: handle click (from hover)
+            if (hoveredHandleRef.current && hoveredStrokeRef.current) {
+                const stroke = hoveredStrokeRef.current
+                const handle = hoveredHandleRef.current
+
+                let anchor = null
+
+                if (stroke.tool === "rect") {
+                    const p1 = stroke.points[0]
+                    const p2 = stroke.points[1]
+
+                    const minX = Math.min(p1.x, p2.x)
+                    const maxX = Math.max(p1.x, p2.x)
+                    const minY = Math.min(p1.y, p2.y)
+                    const maxY = Math.max(p1.y, p2.y)
+
+                    if (handle === "tl") anchor = { x: maxX, y: maxY }
+                    if (handle === "tr") anchor = { x: minX, y: maxY }
+                    if (handle === "bl") anchor = { x: maxX, y: minY }
+                    if (handle === "br") anchor = { x: minX, y: minY }
+                }
+
+                selectedStrokeRef.current = stroke
+                activeHandleRef.current = { corner: handle, anchor }
+                setIsDrawing(true)
+                return
+            }
+
+            // ✅ fallback: normal selection
+            const stroke = getStrokeAtPoint(x, y, strokeRef.current, scaleRef.current)
+
+            if (stroke) {
+                selectedStrokeRef.current = stroke
+                lastMouseRef.current = { x, y }
+                setIsDrawing(true)
+                drawGrid()
+                redraw()
+            } else {
+                selectedStrokeRef.current = null
+                drawGrid()
+                redraw()
+            }
+
+            return
+        }
+        currentStrokeRef.current = {
+            id: crypto.randomUUID(),
+            tool,
+            color,
+            width: brushSize,
+            points: [{x,y}]
+        }
+        if(tool === "rect" || tool === "line" || tool === "circle"){
+            currentStrokeRef.current.points.push({x,y})
+        }
+        setIsDrawing(true)
+
+        console.log("Mouse Down at:",x,y)
+    }
+
+    // handle mouse up hook
+
+    const handleMouseUp = () => {
+        if(isPanningRef.current){
+            isPanningRef.current = false
+            return 
+        }
+        if(tool === "select"){
+            if(selectedStrokeRef.current){
+                socketRef.current.emit("stroke-move", selectedStrokeRef.current)
+                // selectedStrokeRef.current = null
+            }
+            activeHandleRef.current = null
+            setIsDrawing(false)
+            drawGrid()
+            redraw()
+
+            return
+        }
+        if(!currentStrokeRef.current) return
+        strokeRef.current.push(currentStrokeRef.current)
+        socketRef.current.emit("stroke-complete", currentStrokeRef.current)
+        drawGrid()
+        redraw()
+        const ctx = canvasRef.current.getContext("2d")
+        ctx.globalCompositeOperation = "source-over"
+        currentStrokeRef.current = null
+        setIsDrawing(false)
+    }
+    return {
+        canvasRef,
+        gridCanvasRef,
+        redraw,
+        strokeRef,
+        scaleRef,
+        offsetXRef,
+        offsetYRef,
+        handlers: {
+            onMouseDown: handleMouseDown,
+            onMouseMove: handleMouseMove,
+            onMouseUp: handleMouseUp,
+            onMouseLeave: handleMouseUp,
+        }
+    }
+}
