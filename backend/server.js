@@ -60,7 +60,7 @@ io.on("connection", (socket) => {
         const index = rooms[roomId].findIndex(s => s.id === stroke.id)
         if(index !== -1){
             const existingUserId = rooms[roomId][index].userId
-            const previousPoints = rooms[roomId][index].points  
+            const previousPoints = structuredClone(rooms[roomId][index].points)  
 
             rooms[roomId][index] = {
                 ...stroke,

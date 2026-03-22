@@ -6,7 +6,7 @@ import {
     getHandleAtPoint 
 } from "../utils/canvasUtils"
 
-export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGrid,spacePressRef) => {
+export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGrid,spacePressRef, userIdRef) => {
 
     const canvasRef = useRef(null)
     const gridCanvasRef = useRef(null)
@@ -22,6 +22,33 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
     const scaleRef = useRef(1)
     const offsetXRef = useRef(0)
     const offsetYRef = useRef(0)
+    const undoStackRef = useRef([])
+    const redoStackRef = useRef([])
+    const cloneStrokes = () => {
+        return JSON.parse(JSON.stringify(strokeRef.current))
+    }
+    const undo  = () => {
+        if(undoStackRef.current.length === 0) return
+
+        const prevState = undoStackRef.current.pop()
+
+        redoStackRef.current.push(cloneStrokes())
+
+        strokeRef.current = prevState
+
+        redraw()
+    }
+    const redo  = () => {
+        if(redoStackRef.current.length === 0) return
+
+        const nextState = redoStackRef.current.pop()
+
+        undoStackRef.current.push(cloneStrokes())
+
+        strokeRef.current = nextState
+
+        redraw()
+    }
 
     const isPanningRef = useRef(false)
     const panStartRef = useRef({ x: 0, y: 0 })
@@ -54,27 +81,27 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
     // redraw function that redraws the canvas everytime
 
     const redraw = () => {
-    const canvas = canvasRef.current
-    const ctx = canvas.getContext("2d")
+        const canvas = canvasRef.current
+        const ctx = canvas.getContext("2d")
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.save()
-    ctx.lineWidth = 5
-    ctx.lineCap = "round"
-    
-    ctx.translate(offsetXRef.current, offsetYRef.current)
-    ctx.scale(scaleRef.current, scaleRef.current)
-    strokeRef.current.forEach(stroke => {
-        drawStroke(ctx, stroke, scaleRef.current)
-    })
-    if(selectedStrokeRef.current){
-        drawSelectionBox(ctx, selectedStrokeRef.current, scaleRef.current)
-    }
-    if(currentStrokeRef.current){
-        drawStroke(ctx, currentStrokeRef.current, scaleRef.current)
-    }
-    ctx.restore()
-    ctx.globalCompositeOperation = "source-over"
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.save()
+        ctx.lineWidth = 5
+        ctx.lineCap = "round"
+        
+        ctx.translate(offsetXRef.current, offsetYRef.current)
+        ctx.scale(scaleRef.current, scaleRef.current)
+        strokeRef.current.forEach(stroke => {
+            drawStroke(ctx, stroke, scaleRef.current)
+        })
+        if(selectedStrokeRef.current){
+            drawSelectionBox(ctx, selectedStrokeRef.current, scaleRef.current)
+        }
+        if(currentStrokeRef.current){
+            drawStroke(ctx, currentStrokeRef.current, scaleRef.current)
+        }
+        ctx.restore()
+        ctx.globalCompositeOperation = "source-over"
     }
 
     // handle mouse move hook
@@ -281,6 +308,8 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             const stroke = getStrokeAtPoint(x, y, strokeRef.current, scaleRef.current)
 
             if (stroke) {
+                undoStackRef.current.push(cloneStrokes())
+                redoStackRef.current = []
                 selectedStrokeRef.current = stroke
                 lastMouseRef.current = { x, y }
                 setIsDrawing(true)
@@ -296,6 +325,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         }
         currentStrokeRef.current = {
             id: crypto.randomUUID(),
+            userId: userIdRef.current,
             tool,
             color,
             width: brushSize,
@@ -318,7 +348,13 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         }
         if(tool === "select"){
             if(selectedStrokeRef.current){
-                socketRef.current.emit("stroke-move", selectedStrokeRef.current)
+                socketRef.current.emit("stroke-move", 
+                    {
+                        ...selectedStrokeRef.current,
+                        userId: userIdRef.current
+                        
+                    }
+                )
                 // selectedStrokeRef.current = null
             }
             activeHandleRef.current = null
@@ -329,6 +365,10 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             return
         }
         if(!currentStrokeRef.current) return
+
+        undoStackRef.current.push(cloneStrokes())
+        redoStackRef.current = []
+
         strokeRef.current.push(currentStrokeRef.current)
         socketRef.current.emit("stroke-complete", currentStrokeRef.current)
         drawGrid()
@@ -344,6 +384,8 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         redraw,
         strokeRef,
         scaleRef,
+        undo,
+        redo,
         offsetXRef,
         offsetYRef,
         handlers: {

@@ -92,7 +92,9 @@ const Board = () => {
         ctx.restore() 
         
     }
-    const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef, offsetYRef, handlers} = useCanvasInteractions(tool, color, brushSize, socketRef, drawGrid, spacePressRef)
+    const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef, offsetYRef, handlers, redo, undo,
+
+    } = useCanvasInteractions(tool, color, brushSize, socketRef, drawGrid, spacePressRef, userIdRef)
 
     useEffect(() => {
         const canvas = canvasRef.current
@@ -174,6 +176,15 @@ const Board = () => {
                 spacePressRef.current = true
                 canvasRef.current.style.cursor = "grab"
             }
+            if (e.ctrlKey && e.key === "z") {
+                e.preventDefault()
+                undo()
+            }
+
+            if (e.ctrlKey && e.key === "y") {
+                e.preventDefault()
+                redo()
+            }          
         }
         const handleKeyUp = (e)=>{
             if(e.code === "Space"){
@@ -216,7 +227,8 @@ const Board = () => {
             setColor = {setColor}
             brushSize = {brushSize}
             setBrushSize = {setBrushSize}
-            onUndo={()=>{socketRef.current.emit("undo")}}
+            onUndo={undo}
+            onRedo={redo}
             />
 
         {/* Canvas Area */}

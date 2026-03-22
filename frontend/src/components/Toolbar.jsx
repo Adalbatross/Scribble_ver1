@@ -1,6 +1,6 @@
 import React from "react"
 
-const Toolbar = ({ tool, setTool, onUndo, color, setColor, brushSize, setBrushSize }) => {
+const Toolbar = ({ tool, setTool, onUndo, color, onRedo, setColor, brushSize, setBrushSize }) => {
   return (
     <div className="w-16 border-r flex flex-col items-center py-4 space-y-6 bg-gray-50 px-10">
 
@@ -23,6 +23,12 @@ const Toolbar = ({ tool, setTool, onUndo, color, setColor, brushSize, setBrushSi
         className="w-10 h-10 rounded-md border"
       >
         ↩
+      </button>
+      <button
+        onClick={onRedo}
+        className="w-10 h-10 rounded-md border"
+      >
+        Redo
       </button>
       {/* Divider */}
       <div className="w-10 border-t"></div>
