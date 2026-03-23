@@ -1,10 +1,15 @@
 const express = require("express")
 const http = require("http")
 const { Server } = require("socket.io")
+const { connectDB } = require("./db")
+const Board = require("./models/Board.model")
+connectDB()
 
 const app = express()
+const MAX_UNDO = 50
 const rooms = {}
-const roomHistory = {}  
+const roomUndo = {} 
+const roomRedo = {} 
 const server = http.createServer(app)
 const io = new Server(server, {
     cors: {
@@ -13,26 +18,52 @@ const io = new Server(server, {
     }
 })
 
+const saveBoard = async (roomId) => {
+    if(!rooms[roomId]) return 
+
+    await Board.findByIdAndUpdate(roomId, {
+        strokes: rooms[roomId]
+    })
+}
+
 io.on("connection", (socket) => {
     console.log("User connected:", socket.id)
 
-    socket.on("join-room", ({roomId, userId}) => {
+    socket.on("join-room",  async ({roomId, userId}) => {
         socket.join(roomId)
         socket.data.roomId = roomId
         socket.data.userId = userId
-        if(!rooms[roomId]) rooms[roomId] = []
-        if(!roomHistory[roomId]) roomHistory[roomId] = []
+        if(!rooms[roomId]){
+            const board = await Board.findById(roomId).lean()
+            if(board){
+                rooms[roomId] = board.strokes
+            }else{
+                rooms[roomId] = []
+                await Board.create({
+                    _id: roomId,
+                    strokes: []
+                })
+            }
+        }
+        if(!roomRedo[roomId]) roomRedo[roomId] = []
+        if(!roomUndo[roomId]) roomUndo[roomId] = []
         socket.emit("load-history", rooms[roomId])
+        console.log(`Room created ${roomId}`);
+        
         console.log(`Socket ${socket.id} joined room ${roomId}`)
     })
 
-    socket.on("stroke-complete", (stroke) => {
+    socket.on("stroke-complete", async (stroke) => {
         const roomId = socket.data.roomId
         const userId = socket.data.userId
         if (!roomId) return
         if (!rooms[roomId]) rooms[roomId] = []
-        if (!roomHistory[roomId]) roomHistory[roomId] = []
 
+        roomUndo[roomId].push(structuredClone(rooms[roomId]))
+        if(roomUndo[roomId].length > MAX_UNDO){    
+            roomUndo[roomId].shift()
+        }
+        roomRedo[roomId] = []
         const newStroke = {
             id: stroke.id,
             userId,
@@ -41,72 +72,76 @@ io.on("connection", (socket) => {
             width: stroke.width,
             points: stroke.points
         }
-
+        
         rooms[roomId].push(newStroke)
-        roomHistory[roomId].push({
-            type: "add",
-            userId,
-            strokeId: newStroke.id
-        })
-
+        await saveBoard(roomId)
+        
         socket.broadcast.to(roomId).emit("stroke-complete", newStroke)
     })
-
-    socket.on("stroke-move", (stroke) => {
+    
+    socket.on("stroke-move", async (stroke) => {
         const roomId = socket.data.roomId
         const userId = socket.data.userId  // ← was missing
         if(!roomId || !rooms[roomId]) return
 
+
         const index = rooms[roomId].findIndex(s => s.id === stroke.id)
+
         if(index !== -1){
             const existingUserId = rooms[roomId][index].userId
-            const previousPoints = structuredClone(rooms[roomId][index].points)  
+            // const previousPoints = structuredClone(rooms[roomId][index].points)  
 
             rooms[roomId][index] = {
                 ...stroke,
                 userId: existingUserId
             }
-
-            roomHistory[roomId].push({
-                type: "move",
-                userId,           
-                strokeId: stroke.id,
-                previousPoints: structuredClone(previousPoints)    
-            })
+            await saveBoard(roomId)
         }
 
         socket.broadcast.to(roomId).emit("stroke-move", stroke)
     })
+    socket.on("stroke-move-start", ()=>{
+        const roomId = socket.data.roomId
+        if(!roomId || !rooms[roomId]) return
+
+        roomUndo[roomId].push(structuredClone(rooms[roomId]))
+        if(roomUndo[roomId].length > MAX_UNDO){
+            roomUndo[roomId].shift()
+        }
+        roomRedo[roomId] = []
+    })
 
     socket.on("undo", () => {
         const roomId = socket.data.roomId
-        const userId = socket.data.userId
-        if(!roomId || !rooms[roomId] || !roomHistory[roomId]) return
+        if (!roomId || !roomUndo[roomId] || roomUndo[roomId].length === 0) return
 
-        let actionIndex = -1
-        for(let i = roomHistory[roomId].length - 1; i >= 0; i--){
-            if(roomHistory[roomId][i].userId === userId){
-                actionIndex = i
-                break
-            }
+        const currentState = structuredClone(rooms[roomId])
+
+        const prevState = roomUndo[roomId].pop()
+
+        roomRedo[roomId].push(currentState)
+        if(roomRedo[roomId].length > MAX_UNDO){
+            roomRedo[roomId].shift()
         }
 
-        if(actionIndex === -1) return
+        rooms[roomId] = prevState
 
-        const action = roomHistory[roomId][actionIndex]
-        roomHistory[roomId].splice(actionIndex, 1)
+        io.to(roomId).emit("load-history", rooms[roomId])
+    })
 
-        if(action.type === "add"){
-            rooms[roomId] = rooms[roomId].filter(s => s.id !== action.strokeId)
-            io.to(roomId).emit("undo", action.strokeId)
+    socket.on("redo", () => {
+    const roomId = socket.data.roomId
+    if (!roomId || !roomRedo[roomId] || roomRedo[roomId].length === 0) return
 
-        } else if(action.type === "move"){
-            const index = rooms[roomId].findIndex(s => s.id === action.strokeId)
-            if(index !== -1){
-                rooms[roomId][index].points = action.previousPoints  
-                io.to(roomId).emit("stroke-move", rooms[roomId][index])
-            }
-        }
+    const currentState = structuredClone(rooms[roomId])
+
+    const nextState = roomRedo[roomId].pop()
+
+    roomUndo[roomId].push(currentState)
+
+    rooms[roomId] = nextState
+
+    io.to(roomId).emit("load-history", rooms[roomId])
     })
 
     socket.on("disconnect", () => {

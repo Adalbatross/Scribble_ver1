@@ -144,11 +144,11 @@ const Board = () => {
             drawGrid()
             redraw()
         })
-        socketRef.current.on("undo", (strokeId)=>{
-            strokeRef.current = strokeRef.current.filter(s=> s.id !== strokeId)
-            drawGrid()
-            redraw()
-        })
+        // socketRef.current.on("undo", (strokeId)=>{
+        //     strokeRef.current = strokeRef.current.filter(s=> s.id !== strokeId)
+        //     drawGrid()
+        //     redraw()
+        // })
         const handleWheel  = (e)=>{
             e.preventDefault()
             const zoomIntensity = 0.1
@@ -227,8 +227,8 @@ const Board = () => {
             setColor = {setColor}
             brushSize = {brushSize}
             setBrushSize = {setBrushSize}
-            onUndo={undo}
-            onRedo={redo}
+            onUndo={()=>socketRef.current.emit("undo")}
+            onRedo={()=>socketRef.current.emit("redo")}
             />
 
         {/* Canvas Area */}
