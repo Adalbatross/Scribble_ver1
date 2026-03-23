@@ -128,6 +128,26 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current;
         const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current;
         const stroke = currentStrokeRef.current
+        if(tool === "eraser"){
+            const hitStroke = getStrokeAtPoint(
+                x,
+                y,
+                strokeRef.current,
+                scaleRef.current
+            )
+            if(hitStroke){
+                strokeRef.current = strokeRef.current.filter(
+                    s=>s.id !== hitStroke.id
+                )
+                socketRef.current.emit("stroke-delete", {
+                    id: hitStroke.id
+                })
+
+                drawGrid()
+                redraw()
+            }
+            return 
+        }
         if(!isDrawing) {
             let hoveredHandle = null
             let hoveredStroke = null

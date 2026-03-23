@@ -104,6 +104,7 @@ const Board = () => {
         const resizeCanvas = () => {
             // const strokes = roomCacheRef.current 
             const canvas = canvasRef.current
+            // eslint-disable-next-line react-hooks/immutability
             const gridCanvas = gridCanvasRef.current
             canvas.width = canvas.offsetWidth
             canvas.height = canvas.offsetHeight
@@ -129,6 +130,11 @@ const Board = () => {
         })
         socketRef.current.on("stroke-complete", (stroke)=>{
             strokeRef.current.push(stroke)
+            redraw()
+        })
+        socketRef.current.on("stroke-delete", ({id})=>{
+            strokeRef.current = strokeRef.current.filter(s=>s.id !== id)
+            drawGrid()
             redraw()
         })
         socketRef.current.on("stroke-move", (updatedStroke)=>{

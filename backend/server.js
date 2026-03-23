@@ -6,6 +6,7 @@ const Board = require("./models/Board.model")
 connectDB()
 
 const app = express()
+const saveTimer = {}
 const MAX_UNDO = 50
 const rooms = {}
 const roomUndo = {} 
@@ -17,13 +18,23 @@ const io = new Server(server, {
         methods: ["GET", "POST"]
     }
 })
-
-const saveBoard = async (roomId) => {
+const scheduleSave = (roomId) =>{
     if(!rooms[roomId]) return 
 
-    await Board.findByIdAndUpdate(roomId, {
-        strokes: rooms[roomId]
-    })
+    if(saveTimer[roomId]){
+        clearTimeout(saveTimer[roomId])
+    }
+
+    saveTimer[roomId] = setTimeout(async()=>{
+        try {  
+            await Board.findByIdAndUpdate(roomId, {
+                strokes: rooms[roomId]
+            })
+            console.log(`saved board ${roomId}`);
+        } catch (error) {
+            console.error("save failed: ", error)
+        }
+    },500)
 }
 
 io.on("connection", (socket) => {
@@ -74,7 +85,7 @@ io.on("connection", (socket) => {
         }
         
         rooms[roomId].push(newStroke)
-        await saveBoard(roomId)
+        await scheduleSave(roomId)
         
         socket.broadcast.to(roomId).emit("stroke-complete", newStroke)
     })
@@ -95,7 +106,7 @@ io.on("connection", (socket) => {
                 ...stroke,
                 userId: existingUserId
             }
-            await saveBoard(roomId)
+            await scheduleSave(roomId)
         }
 
         socket.broadcast.to(roomId).emit("stroke-move", stroke)
@@ -109,6 +120,22 @@ io.on("connection", (socket) => {
             roomUndo[roomId].shift()
         }
         roomRedo[roomId] = []
+    })
+    socket.on("stroke-delete",({ id })=>{
+        const roomId  = socket.data.roomId
+        if(!roomId || !rooms[roomId]) return 
+
+        roomUndo[roomId].push(structuredClone(rooms[roomId]))
+        if(roomUndo[roomId].length > MAX_UNDO){
+            roomUndo[roomId].shift()
+        }
+        roomRedo[roomId] = []
+
+        rooms[roomId] = rooms[roomId].filter(s=> s.id !== id)
+
+        scheduleSave(roomId)
+
+        socket.broadcast.to(roomId).emit("stroke-delete", {id})
     })
 
     socket.on("undo", () => {
@@ -144,7 +171,15 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("load-history", rooms[roomId])
     })
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
+        const roomId = socket.data.roomId
+        if(saveTimer[roomId]){
+            clearTimeout(saveTimer[roomId])
+            
+            await Board.findByIdAndUpdate(roomId, {
+                strokes: rooms[roomId]
+            })
+        }
         console.log("User disconnected:", socket.id)
     })
 })

@@ -161,6 +161,35 @@ export const getStrokeAtPoint = (x,y, strokes, scale) =>{
             }
 
         }
+        if (stroke.tool === "pen" && stroke.points.length > 1) {
+            for (let i = 0; i < stroke.points.length - 1; i++) {
+                const p1 = stroke.points[i]
+                const p2 = stroke.points[i + 1]
+
+                const A = x - p1.x
+                const B = y - p1.y
+                const C = p2.x - p1.x
+                const D = p2.y - p1.y
+
+                const dot = A * C + B * D
+                const lenSq = C * C + D * D
+                let param = lenSq !== 0 ? dot / lenSq : -1
+
+                let nearX, nearY
+                if (param < 0) { nearX = p1.x; nearY = p1.y }
+                else if (param > 1) { nearX = p2.x; nearY = p2.y }
+                else {
+                    nearX = p1.x + param * C
+                    nearY = p1.y + param * D
+                }
+
+                const dist = Math.sqrt((x - nearX) ** 2 + (y - nearY) ** 2)
+
+                if (dist <= 10 / scale) {
+                    return stroke
+                }
+            }
+        }
         if (stroke.tool === "line" && stroke.points.length >= 2) {
             const p1 = stroke.points[0]
             const p2 = stroke.points[1]
