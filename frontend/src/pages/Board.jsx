@@ -6,6 +6,8 @@ import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import Toolbar from '../components/Toolbar'
 import { useCanvasInteractions } from '../hooks/useCanvasInteracions'
+import ToolOptionsPanel from '../components/ToolOptionsPanel'
+
 const Board = () => {
     const MIN_ZOOM = 0.1
     const MAX_ZOOM = 10
@@ -182,15 +184,18 @@ const Board = () => {
                 spacePressRef.current = true
                 canvasRef.current.style.cursor = "grab"
             }
-            if (e.ctrlKey && e.key === "z") {
+            const isUndo = (e.ctrlKey || e.metaKey) && e.key === "z"
+            const isRedo = (e.ctrlKey || e.metaKey) && (e.key === "y" || (e.shiftKey && e.key === "Z"))
+
+            if (isUndo) {
                 e.preventDefault()
-                undo()
+                socketRef.current.emit("undo")
             }
 
-            if (e.ctrlKey && e.key === "y") {
+            if (isRedo) {
                 e.preventDefault()
-                redo()
-            }          
+                socketRef.current.emit("redo")
+            }         
         }
         const handleKeyUp = (e)=>{
             if(e.code === "Space"){
@@ -214,39 +219,48 @@ const Board = () => {
 
 
   return (
-    <div className="h-screen flex flex-col bg-white">
+    <div className="h-screen w-screen relative bg-white overflow-hidden">
 
-      {/* Navbar */}
-      <div className="h-14 border-b flex items-center justify-between px-4">
-        <div className="font-semibold">Scribble</div>
-        <div className="text-sm text-gray-500">Board: {id}</div>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 ">
 
         {/* Toolbar */}
-        <Toolbar 
+        <div className="flex items-center gap-2 bg-white shadow-md rounded-xl px-4 py-2 border">
+            <Toolbar 
             tool={tool}
             setTool={setTool}
-            color = {color}
-            setColor = {setColor}
-            brushSize = {brushSize}
-            setBrushSize = {setBrushSize}
-            onUndo={()=>socketRef.current.emit("undo")}
-            onRedo={()=>socketRef.current.emit("redo")}
+            color={color}
+            setColor={setColor}
+            brushSize={brushSize}
+            setBrushSize={setBrushSize}
+            onUndo={() => socketRef.current.emit("undo")}
+            onRedo={() => socketRef.current.emit("redo")}
             />
-
+        </div>
+        </div>
+                {/* Tool Panel */}
+        <div className="absolute top-20 left-4 z-20
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseMove={(e) => e.stopPropagation()}
+        ">
+        <ToolOptionsPanel
+            tool={tool}
+            color={color}
+            setColor={setColor}
+            brushSize={brushSize}
+            setBrushSize={setBrushSize}
+        />
+        </div>
+        
         {/* Canvas Area */}
-        <div className="flex-1 relative bg-gray-100">
+        <div className="absolute inset-0 bg-gray-100">
             <canvas className="absolute inset-0 w-full h-full"
             ref={canvasRef}
             onMouseDown={handlers.onMouseDown}
             onMouseMove={handlers.onMouseMove}
             onMouseUp={handlers.onMouseUp}
             onMouseLeave={handlers.onMouseLeave}
-             style={{zIndex: 2, border: "2px solid red"}}
-             />
+            style={{zIndex: 2, border: "2px solid red"}}
+        />
             <canvas 
             ref={gridCanvasRef}
             className='absolute inset-0 w-full h-full pointer-events-none'
@@ -255,7 +269,6 @@ const Board = () => {
              {/* Drawing canvas */}
         </div>
 
-      </div>
     </div>
   )
 }
