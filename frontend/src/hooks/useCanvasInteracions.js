@@ -22,7 +22,9 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
     const scaleRef = useRef(1)
     const offsetXRef = useRef(0)
     const offsetYRef = useRef(0)
+    const isErasingRef = useRef(false)
     const dragStartPointsRef = useRef(null)
+    const lastErasedRef = useRef(null)
     // const undoStackRef = useRef([])
     // const redoStackRef = useRef([])
     // const cloneStrokes = () => {
@@ -62,7 +64,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         if (!canvas) return
 
         if (!handle) {
-            canvas.style.cursor = tool === "select" ? "pointer" : "crosshair"
+            canvas.style.cursor = tool === "select" ? "default" : "crosshair"
             return
         }
 
@@ -128,14 +130,16 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current;
         const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current;
         const stroke = currentStrokeRef.current
-        if(tool === "eraser"){
+        if(tool === "eraser" && isErasingRef.current){
             const hitStroke = getStrokeAtPoint(
                 x,
                 y,
                 strokeRef.current,
                 scaleRef.current
             )
-            if(hitStroke){
+            if(hitStroke && lastErasedRef.current !== hitStroke.id){
+                lastErasedRef.current = hitStroke.id
+
                 strokeRef.current = strokeRef.current.filter(
                     s=>s.id !== hitStroke.id
                 )
@@ -298,6 +302,25 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         const rect = canvas.getBoundingClientRect()
         const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current
         const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current
+        if(tool === "eraser"){
+            isErasingRef.current = true
+
+            const hitStroke = getStrokeAtPoint(
+                x,
+                y,
+                strokeRef.current,
+                scaleRef.current
+            )
+            if(hitStroke) {
+                lastErasedRef.current = hitStroke.id
+
+                strokeRef.current = strokeRef.current.filter(s=> s.id !== hitStroke.id)
+
+                socketRef.current.emit("stroke-delete", {id: hitStroke.id})
+                drawGrid()
+                redraw()
+            }
+        }
         if (tool === "select") {
 
             // ✅ PRIORITY: handle click (from hover)
@@ -392,6 +415,10 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             redraw()
 
             return
+        }
+        if(tool === "eraser"){
+            isErasingRef.current = false
+            lastErasedRef.current = null
         }
         if(!currentStrokeRef.current) return
 

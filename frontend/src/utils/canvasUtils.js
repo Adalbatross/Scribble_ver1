@@ -156,7 +156,18 @@ export const getStrokeAtPoint = (x,y, strokes, scale) =>{
             const minY = Math.min(p1.y, p2.y)
             const maxY = Math.max(p1.y, p2.y)
 
-            if(x>= minX && x<=maxX && y>=minY && y<= maxY){
+            // if(x>= minX && x<=maxX && y>=minY && y<= maxY){
+            //     return stroke
+            // } this is the old edge detection algo which helps in the delection inside the shape 
+
+            const threshold = 10 / scale
+
+            const nearLeft   = Math.abs(x - minX) <= threshold && y >= minY && y <= maxY
+            const nearRight  = Math.abs(x - maxX) <= threshold && y >= minY && y <= maxY
+            const nearTop    = Math.abs(y - minY) <= threshold && x >= minX && x <= maxX
+            const nearBottom = Math.abs(y - maxY) <= threshold && x >= minX && x <= maxX
+
+            if (nearLeft || nearRight || nearTop || nearBottom) {
                 return stroke
             }
 
@@ -226,9 +237,16 @@ export const getStrokeAtPoint = (x,y, strokes, scale) =>{
 
             const dist = Math.sqrt((x - p1.x)**2 + (y - p1.y)**2)
 
-            if ( dist <= radius + 10 / scale) {
+            // if ( dist <= radius + 10 / scale) {
+            //     return stroke
+            // } same for this detection of the whole shpe inside the shape
+
+            const threshold = 10 / scale
+
+            if (Math.abs(dist -radius) <= threshold) {
                 return stroke
             }
+
         }
     }
     return null
