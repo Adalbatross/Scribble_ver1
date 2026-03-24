@@ -17,9 +17,11 @@ const Board = () => {
     const socketRef = useRef(null)
     const spacePressRef = useRef(false)
     const userIdRef = useRef(null)
-    const [tool, setTool] = useState("pen")
+    const [tool, setTool] = useState("select")
     const [color, setColor] = useState("black")
     const [brushSize, setBrushSize] = useState(5)
+    const [copied, setCopied] = useState(false)
+    const [users, setUsers] = useState([])
     if(! userIdRef.current){
         const existing = localStorage.getItem("scribble-user-id")
         if(existing){
@@ -29,6 +31,13 @@ const Board = () => {
             localStorage.setItem("scribble-user-id", newId)
             userIdRef.current = newId
         }
+    }
+    const handleCopy = async () => {
+    const url = `${window.location.origin}/board/${id}`
+
+    await navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
     }
     
     const drawGrid = ()=> {
@@ -94,7 +103,7 @@ const Board = () => {
         ctx.restore() 
         
     }
-    const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef, offsetYRef, handlers, redo, undo,
+    const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef, offsetYRef, handlers, 
 
     } = useCanvasInteractions(tool, color, brushSize, socketRef, drawGrid, spacePressRef, userIdRef)
 
@@ -125,6 +134,9 @@ const Board = () => {
         socketRef.current = io("http://localhost:5000")
         socketRef.current.on("connect",()=>{
             console.log("Connected to the server:", socketRef.current.id);
+        })
+        socketRef.current.on("room-users",(usersList) => {
+            setUsers(usersList)
         })
         socketRef.current.emit("join-room", {
             roomId: id,
@@ -238,10 +250,10 @@ const Board = () => {
         </div>
         </div>
                 {/* Tool Panel */}
-        <div className="absolute top-20 left-4 z-20
+        <div className="absolute top-20 left-4 z-20"
         onMouseDown={(e) => e.stopPropagation()}
         onMouseMove={(e) => e.stopPropagation()}
-        ">
+        >
         <ToolOptionsPanel
             tool={tool}
             color={color}
@@ -249,6 +261,47 @@ const Board = () => {
             brushSize={brushSize}
             setBrushSize={setBrushSize}
         />
+        </div>
+
+        <div className="absolute top-4 right-4 z-20">
+        <div className="bg-white shadow-md rounded-xl px-4 py-3 border text-sm flex flex-col gap-2">
+
+            {/* Room ID */}
+            <div className="flex items-center justify-between gap-2">
+            <span className="font-medium text-gray-700">
+                Board
+            </span>
+
+            <button
+                onClick={handleCopy}
+                className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200 transition"
+            >
+                {copied ? "Copied!" : "Copy"}
+            </button>
+            </div>
+
+            <div className="text-gray-500 text-xs break-all">
+            {id}
+            </div>
+
+            {/* Users */}
+            <div className="text-gray-500 text-xs">
+            {users.length} member{users.length !== 1 ? "s" : ""}
+            </div>
+
+            {/* Avatars */}
+            <div className="flex gap-1">
+            {users.map(u => (
+                <div
+                key={u.socketId}
+                className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs"
+                >
+                {u.userId.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase()}
+                </div>
+            ))}
+            </div>
+
+        </div>
         </div>
         
         {/* Canvas Area */}

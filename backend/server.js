@@ -4,7 +4,7 @@ const { Server } = require("socket.io")
 const { connectDB } = require("./db")
 const Board = require("./models/Board.model")
 connectDB()
-
+const roomUsers = {}
 const app = express()
 const saveTimer = {}
 const MAX_UNDO = 50
@@ -56,6 +56,12 @@ io.on("connection", (socket) => {
                 })
             }
         }
+        if(!roomUsers[roomId]) roomUsers[roomId] = []
+        roomUsers[roomId].push({
+            socketId: socket.id,
+            userId
+        })
+        io.to(roomId).emit("room-users", roomUsers[roomId])
         if(!roomRedo[roomId]) roomRedo[roomId] = []
         if(!roomUndo[roomId]) roomUndo[roomId] = []
         socket.emit("load-history", rooms[roomId])
@@ -173,6 +179,13 @@ io.on("connection", (socket) => {
 
     socket.on("disconnect", async () => {
         const roomId = socket.data.roomId
+        if(!roomId || !roomUsers[roomId]) return
+
+        roomUsers[roomId] = roomUsers[roomId].filter(
+            u => u.socketId !== socket.id 
+        )
+        io.to(roomId).emit("room-users", roomUsers[roomId])
+        
         if(saveTimer[roomId]){
             clearTimeout(saveTimer[roomId])
             
