@@ -33,7 +33,7 @@ export const drawStroke = (ctx, stroke) =>{
             ctx.rect(p1.x, p1.y, width, height)
             ctx.stroke()
         }
-        if(stroke.tool === "line" && stroke.points.length >= 2){
+        if((stroke.tool === "line" || stroke.tool === "arrow" ) && stroke.points.length >= 2){
             const p1 = stroke.points[0]
             const p2 = stroke.points[1]
 
@@ -41,6 +41,27 @@ export const drawStroke = (ctx, stroke) =>{
             ctx.moveTo(p1.x, p1.y)
             ctx.lineTo(p2.x, p2.y)
             ctx.stroke()
+
+            if (stroke.tool === "arrow") {
+                const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x)
+
+                // arrow head size based on stroke width
+                const headLength = Math.max(12, stroke.width * 3)
+                const headAngle = Math.PI / 7
+
+                const x1 = p2.x - headLength * Math.cos(angle - headAngle)
+                const y1 = p2.y - headLength * Math.sin(angle - headAngle)
+
+                const x2 = p2.x - headLength * Math.cos(angle + headAngle)
+                const y2 = p2.y - headLength * Math.sin(angle + headAngle)
+
+                ctx.beginPath()
+                ctx.moveTo(p2.x, p2.y)
+                ctx.lineTo(x1, y1)
+                ctx.moveTo(p2.x, p2.y)
+                ctx.lineTo(x2, y2)
+                ctx.stroke()
+            }
         }
         if (stroke.tool === "circle" && stroke.points.length>=2){
             const p1 = stroke.points[0]
@@ -94,20 +115,30 @@ export const drawSelectionBox = (ctx, stroke,scale) =>{
     }
 
     //  LINE
-    if (stroke.tool === "line") {
+    if (stroke.tool === "line" || stroke.tool === "arrow") {
         const p1 = stroke.points[0]
         const p2 = stroke.points[1]
 
-        // dashed line overlay
+        // dashed overlay
         ctx.beginPath()
         ctx.moveTo(p1.x, p1.y)
         ctx.lineTo(p2.x, p2.y)
         ctx.stroke()
 
         // handles at both ends
-        ;[p1, p2].forEach(p => {
+        ;[
+            { point: p1, key: "start" },
+            { point: p2, key: "end" }
+        ].forEach(({ point, key }) => {
             ctx.beginPath()
-            ctx.arc(p.x, p.y, handleSize, 0, Math.PI * 2)
+
+            // arrow tip handle slightly bigger
+            const size =
+                stroke.tool === "arrow" && key === "end"
+                    ? handleSize * 1.25
+                    : handleSize
+
+            ctx.arc(point.x, point.y, size, 0, Math.PI * 2)
             ctx.fillStyle = "#0077FF"
             ctx.fill()
         })
@@ -201,7 +232,7 @@ export const getStrokeAtPoint = (x,y, strokes, scale) =>{
                 }
             }
         }
-        if (stroke.tool === "line" && stroke.points.length >= 2) {
+        if ((stroke.tool === "line" || stroke.tool === "arrow") && stroke.points.length >= 2) {
             const p1 = stroke.points[0]
             const p2 = stroke.points[1]
 
@@ -278,7 +309,7 @@ export const getHandleAtPoint = (x, y, stroke,scale) => {
         }
     }
 
-    if (stroke.tool === "line") {
+    if (stroke.tool === "line" || stroke.tool === "arrow") {
         const [p1, p2] = stroke.points
 
         if (Math.hypot(x - p1.x, y - p1.y) <= radius) return "start"

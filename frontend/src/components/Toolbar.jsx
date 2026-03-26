@@ -7,6 +7,7 @@ import CircleIcon from "../icons/CircleIcon"
 import EraserIcon from "../icons/EraserIcon"
 import RedoIcon from "../icons/RedoIcon"
 import UndoIcon from "../icons/UndoIcon"
+import ArrowIcon from "../icons/ArrowIcon"
 
 const ToolButton = ({ active, onClick, children, title }) => (
   <button
@@ -42,12 +43,17 @@ const Toolbar = ({ tool, setTool, onUndo, onRedo }) => {
         <PenIcon />
       </ToolButton>
 
-      <ToolButton active={tool === "rect"} onClick={() => setTool("rect")}>
-        <RectIcon />
-      </ToolButton>
 
       <ToolButton active={tool === "line"} onClick={() => setTool("line")}>
         <LineIcon />
+      </ToolButton>
+
+      <ToolButton active={tool === "arrow"} onClick={() => setTool("arrow")}>
+      <ArrowIcon />
+      </ToolButton>
+      
+      <ToolButton active={tool === "rect"} onClick={() => setTool("rect")}>
+        <RectIcon />
       </ToolButton>
 
       <ToolButton active={tool === "circle"} onClick={() => setTool("circle")}>

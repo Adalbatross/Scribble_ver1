@@ -9,8 +9,8 @@ const COLORS = [
 
 const ToolOptionsPanel = ({ tool, color, setColor, brushSize, setBrushSize }) => {
 
-  const showColor = ["pen", "rect", "line", "circle"].includes(tool)
-  const showSize = ["pen", "line","rect", "circle"].includes(tool)
+  const showColor = ["pen", "rect", "line", "circle","arrow"].includes(tool)
+  const showSize = ["pen", "line","rect", "circle", "arrow"].includes(tool)
 
   if (!showColor && !showSize) return null
 

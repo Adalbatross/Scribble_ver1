@@ -230,7 +230,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             }
 
             // 🟩 LINE RESIZE
-            if (stroke.tool === "line") {
+            if (stroke.tool === "line" || stroke.tool === "arrow") {
                 const p1 = stroke.points[0]
                 const p2 = stroke.points[1]
 
@@ -306,7 +306,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             return
         }
         if(!stroke) return 
-        if(stroke.tool === "rect" || stroke.tool === "line" || stroke.tool === "circle"){
+        if(stroke.tool === "rect" || stroke.tool === "line" || stroke.tool === "circle" || stroke.tool === "arrow"){
             stroke.points[1] = {x,y}
             drawGrid()
             redraw()
@@ -493,7 +493,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             width: brushSize,
             points: [{x,y}]
         }
-        if(tool === "rect" || tool === "line" || tool === "circle"){
+        if(tool === "rect" || tool === "line" || tool === "circle" || tool === "arrow"){
             currentStrokeRef.current.points.push({x,y})
         }
         setIsDrawing(true)
