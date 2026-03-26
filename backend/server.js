@@ -214,6 +214,24 @@ io.on("connection", (socket) => {
         }
         console.log("User disconnected:", socket.id)
     })
+    
+    socket.on("delete-selected", async (ids) => {
+        const roomId = socket.data.roomId
+        if (!roomId || !rooms[roomId]) return
+
+        roomUndo[roomId].push(structuredClone(rooms[roomId]))
+        if (roomUndo[roomId].length > MAX_UNDO) {
+            roomUndo[roomId].shift()
+        }
+
+        roomRedo[roomId] = []
+
+        rooms[roomId] = rooms[roomId].filter(stroke => !ids.includes(stroke.id))
+
+        scheduleSave(roomId)
+
+        socket.broadcast.to(roomId).emit("delete-selected", ids)
+    })
 })
 
 server.listen(5000, ()=>{

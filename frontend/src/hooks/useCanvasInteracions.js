@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { 
     drawStroke, 
     drawSelectionBox, 
@@ -408,7 +408,15 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
 
                 const bounds = getGroupBounds(selectedStrokes)
 
-                if (isPointInGroupBounds(x, y, bounds, scaleRef.current)) {
+                const clickedStroke = getStrokeAtPoint(
+                    x, 
+                    y,
+                    strokeRef.current,
+                    scaleRef.current
+                )
+                const clickedOnAnyShape = !!clickedStroke
+
+                if (isPointInGroupBounds(x, y, bounds, scaleRef.current) && !clickedOnAnyShape) {
                     socketRef.current.emit("stroke-move-start")
 
                     multiDragStartRef.current = {}
@@ -443,7 +451,9 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                         selectedIdsRef.current = [...selectedIdsRef.current, stroke.id]
                     }
                 } else {
-                    selectedIdsRef.current = [stroke.id]
+                    if(!alreadySelected) {
+                        selectedIdsRef.current = [stroke.id]
+                    }
                 }
                 
                 multiDragStartRef.current = {}
@@ -472,7 +482,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                     redraw()
                 }
             }
-
+            
             return
         }
         currentStrokeRef.current = {
@@ -487,10 +497,10 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             currentStrokeRef.current.points.push({x,y})
         }
         setIsDrawing(true)
-
+        
         console.log("Mouse Down at:",x,y)
     }
-
+    
     // handle mouse up hook
 
     const handleMouseUp = () => {
@@ -535,6 +545,29 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         currentStrokeRef.current = null
         setIsDrawing(false)
     }
+    useEffect(() => {
+        const handleDeleteSelected = () => {
+            if (selectedIdsRef.current.length === 0) return
+
+            strokeRef.current = strokeRef.current.filter(
+                stroke => !selectedIdsRef.current.includes(stroke.id)
+            )
+
+            socketRef.current.emit("delete-selected", selectedIdsRef.current)
+
+            selectedIdsRef.current = []
+            selectedStrokeRef.current = null
+
+            drawGrid()
+            redraw()
+        }
+
+        window.addEventListener("delete-selected", handleDeleteSelected)
+
+        return () => {
+            window.removeEventListener("delete-selected", handleDeleteSelected)
+        }
+    }, [])
     return {
         canvasRef,
         gridCanvasRef,

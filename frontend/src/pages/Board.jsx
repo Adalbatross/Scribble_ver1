@@ -172,6 +172,14 @@ const Board = () => {
             drawGrid()
             redraw()
         })
+        socketRef.current.on("delete-selected", (ids) => {
+            strokeRef.current = strokeRef.current.filter(
+                stroke => !ids.includes(stroke.id)
+            )
+
+            drawGrid()
+            redraw()
+        })
         socketRef.current.on("load-history", (strokes)=>{
             strokeRef.current = strokes
             drawGrid()
@@ -220,7 +228,11 @@ const Board = () => {
             if (isRedo) {
                 e.preventDefault()
                 socketRef.current.emit("redo")
-            }         
+            }    
+            const isDelete  = e.key === "Delete" || e.key === "Backspace"
+            if(isDelete) {
+                window.dispatchEvent(new CustomEvent("delete-selected"))
+            }     
         }
         const handleKeyUp = (e)=>{
             if(e.code === "Space"){
