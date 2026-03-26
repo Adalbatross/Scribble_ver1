@@ -294,3 +294,38 @@ export const getHandleAtPoint = (x, y, stroke,scale) => {
 
     return null
 }
+
+export const getGroupBounds = (strokes) => {
+    if (!strokes || strokes.length === 0) return null
+
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    strokes.forEach((stroke) => {
+        if (!stroke.points || stroke.points.length === 0) return
+
+        const xs = stroke.points.map(p => p.x)
+        const ys = stroke.points.map(p => p.y)
+
+        minX = Math.min(minX, ...xs)
+        minY = Math.min(minY, ...ys)
+        maxX = Math.max(maxX, ...xs)
+        maxY = Math.max(maxY, ...ys)
+    })
+
+    return { minX, minY, maxX, maxY }
+}
+export const isPointInGroupBounds = (x, y , bounds, scale = 1) => {
+    if(!bounds) return false
+
+    const padding = 10 / scale
+
+    return (
+        x >= bounds.minX - padding &&
+        x <= bounds.maxX + padding &&
+        y >= bounds.minY - padding &&
+        y <= bounds.maxY + padding 
+    )
+}

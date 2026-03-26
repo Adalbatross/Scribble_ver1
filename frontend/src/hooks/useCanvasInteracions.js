@@ -3,7 +3,9 @@ import {
     drawStroke, 
     drawSelectionBox, 
     getStrokeAtPoint, 
-    getHandleAtPoint 
+    getHandleAtPoint, 
+    getGroupBounds,
+    isPointInGroupBounds
 } from "../utils/canvasUtils"
 
 export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGrid,spacePressRef, userIdRef) => {
@@ -25,6 +27,8 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
     const isErasingRef = useRef(false)
     const dragStartPointsRef = useRef(null)
     const lastErasedRef = useRef(null)
+    const selectedIdsRef = useRef([])
+    const multiDragStartRef = useRef({})
     // const undoStackRef = useRef([])
     // const redoStackRef = useRef([])
     // const cloneStrokes = () => {
@@ -97,9 +101,42 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         strokeRef.current.forEach(stroke => {
             drawStroke(ctx, stroke, scaleRef.current)
         })
-        if(selectedStrokeRef.current){
-            drawSelectionBox(ctx, selectedStrokeRef.current, scaleRef.current)
+        // if(selectedStrokeRef.current){
+        //     drawSelectionBox(ctx, selectedStrokeRef.current, scaleRef.current)
+        // }
+        if (selectedIdsRef.current.length > 1) {
+            const selectedStrokes = strokeRef.current.filter(s =>
+                selectedIdsRef.current.includes(s.id)
+            )
+
+            const bounds = getGroupBounds(selectedStrokes)
+
+            if (bounds) {
+                const { minX, minY, maxX, maxY } = bounds
+                const padding = 10 / scaleRef.current
+
+                ctx.save()
+                ctx.strokeStyle = "#3b82f6"
+                ctx.lineWidth = 1.5 / scaleRef.current
+                ctx.setLineDash([6 / scaleRef.current, 4 / scaleRef.current])
+
+                ctx.strokeRect(
+                    minX - padding,
+                    minY - padding,
+                    (maxX - minX) + padding * 2,
+                    (maxY - minY) + padding * 2
+                )
+
+                ctx.setLineDash([])
+                ctx.restore()
+            }
         }
+        selectedIdsRef.current.forEach((id)=>{
+            const stroke = strokeRef.current.find(s=> s.id === id)
+            if(stroke){
+                drawSelectionBox(ctx, stroke, scaleRef.current)
+            }
+        })
         if(currentStrokeRef.current){
             drawStroke(ctx, currentStrokeRef.current, scaleRef.current)
         }
@@ -238,17 +275,28 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         
         if(tool === "select" && selectedStrokeRef.current && isDrawing && !activeHandleRef.current){
 
-            const stroke = selectedStrokeRef.current
+            // const stroke = selectedStrokeRef.current
             const startMouse = lastMouseRef.current
             const dx = x - startMouse.x
             const dy = y - startMouse.y
 
-            const originalPoints = dragStartPointsRef.current
+            // const originalPoints = dragStartPointsRef.current
 
-            stroke.points = originalPoints.map(p => ({
-                x: p.x + dx,
-                y: p.y + dy
-            }))
+            // stroke.points = originalPoints.map(p => ({
+            //     x: p.x + dx,
+            //     y: p.y + dy
+            // }))
+            selectedIdsRef.current.forEach((id)=>{
+                const stroke = strokeRef.current.find(s=> s.id === id)
+                const originalPoints = multiDragStartRef.current[id]
+
+                if(stroke && originalPoints){
+                    stroke.points = originalPoints.map(p => ({
+                        x: p.x + dx, 
+                        y: p.y + dy
+                    }))
+                }
+            })
 
             // lastMouseRef.current = { x, y }
 
@@ -290,6 +338,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
     // handle mouse down hook
 
     const handleMouseDown = (e) => {
+        const isShiftPressed = e.shiftKey
         if(spacePressRef.current){
             isPanningRef.current = true
             panStartRef.current = {
@@ -321,9 +370,10 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 redraw()
             }
         }
+        
+        // PRIORITY: handle click (from hover)
         if (tool === "select") {
-
-            // ✅ PRIORITY: handle click (from hover)
+            //  GROUP BOX MOVE
             if (hoveredHandleRef.current && hoveredStrokeRef.current) {
                 socketRef.current.emit("stroke-move-start")
                 const stroke = hoveredStrokeRef.current
@@ -334,7 +384,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 if (stroke.tool === "rect") {
                     const p1 = stroke.points[0]
                     const p2 = stroke.points[1]
-
+                    
                     const minX = Math.min(p1.x, p2.x)
                     const maxX = Math.max(p1.x, p2.x)
                     const minY = Math.min(p1.y, p2.y)
@@ -351,25 +401,76 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 setIsDrawing(true)
                 return
             }
+            if (selectedIdsRef.current.length > 1) {
+                const selectedStrokes = strokeRef.current.filter(s =>
+                    selectedIdsRef.current.includes(s.id)
+                )
 
+                const bounds = getGroupBounds(selectedStrokes)
+
+                if (isPointInGroupBounds(x, y, bounds, scaleRef.current)) {
+                    socketRef.current.emit("stroke-move-start")
+
+                    multiDragStartRef.current = {}
+
+                    selectedIdsRef.current.forEach((id) => {
+                        const s = strokeRef.current.find(st => st.id === id)
+                        if (s) {
+                            multiDragStartRef.current[id] = structuredClone(s.points)
+                        }
+                    })
+
+                    lastMouseRef.current = { x, y }
+                    setIsDrawing(true)
+                    drawGrid()
+                    redraw()
+                    return
+                }
+            }
+            
             // ✅ fallback: normal selection
             const stroke = getStrokeAtPoint(x, y, strokeRef.current, scaleRef.current)
 
             if (stroke) {
-                // undoStackRef.current.push(cloneStrokes())
-                // redoStackRef.current = []
-                socketRef.current.emit("stroke-move-start")
+                const alreadySelected = selectedIdsRef.current.includes(stroke.id)
+                
+                if (isShiftPressed) {
+                    if (alreadySelected) {
+                        selectedIdsRef.current = selectedIdsRef.current.filter(
+                            id => id !== stroke.id
+                        )
+                    } else {
+                        selectedIdsRef.current = [...selectedIdsRef.current, stroke.id]
+                    }
+                } else {
+                    selectedIdsRef.current = [stroke.id]
+                }
+                
+                multiDragStartRef.current = {}
+                
+                selectedIdsRef.current.forEach((id)=>{
+                    const s = strokeRef.current.find(st=> st.id === id)
+                    if(s){
+                        multiDragStartRef.current[id] = structuredClone(s.points)
+                    }
+                })
                 dragStartPointsRef.current = structuredClone(stroke.points)
-
+                
                 selectedStrokeRef.current = stroke
                 lastMouseRef.current = { x, y }
                 setIsDrawing(true)
+                if(!isShiftPressed){
+                    socketRef.current.emit("stroke-move-start")
+                }
                 drawGrid()
                 redraw()
             } else {
-                selectedStrokeRef.current = null
-                drawGrid()
-                redraw()
+                if (!isShiftPressed) {
+                    selectedIdsRef.current = []
+                    selectedStrokeRef.current = null
+                    drawGrid()
+                    redraw()
+                }
             }
 
             return
@@ -398,18 +499,18 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             return 
         }
         if(tool === "select"){
-            if(selectedStrokeRef.current){
-                socketRef.current.emit("stroke-move", 
-                    {
-                        ...selectedStrokeRef.current,
-                        userId: userIdRef.current
-                        
-                    }
+            if(selectedIdsRef.current.length > 0){
+                const movedStrokes = strokeRef.current.filter(s => 
+                    selectedIdsRef.current.includes(s.id)
+                )
+                socketRef.current.emit("strokes-move", 
+                    movedStrokes
                 )
                 // selectedStrokeRef.current = null
             }
             activeHandleRef.current = null
             dragStartPointsRef.current = null
+            multiDragStartRef.current = {}
             setIsDrawing(false)
             drawGrid()
             redraw()

@@ -138,6 +138,7 @@ const Board = () => {
         socketRef.current.on("room-users",(usersList) => {
             setUsers(usersList)
         })
+
         socketRef.current.emit("join-room", {
             roomId: id,
             userId: userIdRef.current
@@ -158,6 +159,18 @@ const Board = () => {
                 drawGrid()
                 redraw()
             }
+        })
+        socketRef.current.on("strokes-move", (updatedStrokes) => {
+            updatedStrokes.forEach((updatedStroke) => {
+                const index = strokeRef.current.findIndex(s => s.id === updatedStroke.id)
+
+                if (index !== -1) {
+                    strokeRef.current[index] = updatedStroke
+                }
+            })
+
+            drawGrid()
+            redraw()
         })
         socketRef.current.on("load-history", (strokes)=>{
             strokeRef.current = strokes

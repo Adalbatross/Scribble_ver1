@@ -176,6 +176,25 @@ io.on("connection", (socket) => {
 
     io.to(roomId).emit("load-history", rooms[roomId])
     })
+    socket.on("strokes-move", async (updatedStrokes)=> {
+        const roomId = socket.data.roomId
+        if(!roomId || !rooms[roomId]) return 
+
+        updatedStrokes.forEach((updatedStrokes)=>{
+            const index = rooms[roomId].findIndex(s=> s.id === updatedStrokes.id)
+            if(index !== -1 ){
+                const existingUserId = rooms[roomId][index].userId
+
+                rooms[roomId][index] = {
+                    ...updatedStrokes,
+                    userId: existingUserId
+                }
+            }
+        })
+
+        scheduleSave(roomId)
+        socket.broadcast.to(roomId).emit("strokes-move", updatedStrokes)
+    })
 
     socket.on("disconnect", async () => {
         const roomId = socket.data.roomId
