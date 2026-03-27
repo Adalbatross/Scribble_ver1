@@ -360,3 +360,22 @@ export const isPointInGroupBounds = (x, y , bounds, scale = 1) => {
         y <= bounds.maxY + padding 
     )
 }
+
+export const isStrokeInBounds = (stroke, bounds) => {
+    if (!stroke.points || stroke.points.length === 0) return false
+
+    const xs = stroke.points.map(p=> p.x)
+    const ys = stroke.points.map(p=> p.y)
+
+    const minX = Math.min(...xs)
+    const maxX = Math.max(...xs)
+    const minY = Math.min(...ys)
+    const maxY = Math.max(...ys)
+
+    return !(
+        maxX < bounds.minX || 
+        minX > bounds.maxX || 
+        maxY < bounds.minY ||
+        minY > bounds.maxY
+    )
+}

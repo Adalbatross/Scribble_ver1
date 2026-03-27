@@ -5,7 +5,8 @@ import {
     getStrokeAtPoint, 
     getHandleAtPoint, 
     getGroupBounds,
-    isPointInGroupBounds
+    isPointInGroupBounds,
+    isStrokeInBounds
 } from "../utils/canvasUtils"
 
 export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGrid,spacePressRef, userIdRef) => {
@@ -29,6 +30,11 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
     const lastErasedRef = useRef(null)
     const selectedIdsRef = useRef([])
     const multiDragStartRef = useRef({})
+    const marqueeStartRef = useRef(null)
+    const marqueeCurrentRef = useRef(null)
+    const isMarqueeSelectingRef = useRef(false)
+    const didMoveSelectionRef= useRef(false)
+    const clipboardRef = useRef([])
     // const undoStackRef = useRef([])
     // const redoStackRef = useRef([])
     // const cloneStrokes = () => {
@@ -140,6 +146,28 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         if(currentStrokeRef.current){
             drawStroke(ctx, currentStrokeRef.current, scaleRef.current)
         }
+        if(isMarqueeSelectingRef.current && marqueeStartRef.current && marqueeCurrentRef.current){
+            const start = marqueeStartRef.current
+            const current = marqueeCurrentRef.current
+
+            const minX  = Math.min(start.x, current.x)
+            const minY  = Math.min(start.y, current.y)
+            const width  = Math.abs(start.x - current.x)
+            const height  = Math.abs(start.y - current.y)
+
+            ctx.save()
+            ctx.strokeStyle = "#3b82f6"
+            ctx.lineWidth = 1.5 / scaleRef.current
+            ctx.setLineDash([6 / scaleRef.current, 4 / scaleRef.current])
+            ctx.strokeRect(minX, minY, width, height)
+
+            ctx.fillStyle = "rgba(59, 130, 246, 0.08)"
+            ctx.fillRect(minX, minY, width, height)
+
+            ctx.restore()
+
+
+        }
         ctx.restore()
         ctx.globalCompositeOperation = "source-over"
     }
@@ -205,11 +233,18 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             }
             hoveredHandleRef.current = hoveredHandle
             hoveredStrokeRef.current = hoveredStroke
-
+            
             updateCursor(hoveredHandle)
+        }
+        if(tool === 'select' && isMarqueeSelectingRef.current){
+            marqueeCurrentRef.current = {x, y}
+            drawGrid()
+            redraw()
+            return 
         }
         if (tool === "select" && selectedStrokeRef.current && isDrawing && activeHandleRef.current) {
             
+            didMoveSelectionRef.current = true
             const stroke = selectedStrokeRef.current
             const { corner, anchor } = activeHandleRef.current
             
@@ -273,7 +308,9 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             return
         }
         
-        if(tool === "select" && selectedStrokeRef.current && isDrawing && !activeHandleRef.current){
+        if(tool === "select" && selectedIdsRef.current.length > 0 && isDrawing && !activeHandleRef.current){
+
+            didMoveSelectionRef.current = true
 
             // const stroke = selectedStrokeRef.current
             const startMouse = lastMouseRef.current
@@ -351,6 +388,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         const rect = canvas.getBoundingClientRect()
         const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current
         const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current
+        didMoveSelectionRef.current = false
         if(tool === "eraser"){
             isErasingRef.current = true
 
@@ -476,8 +514,14 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 redraw()
             } else {
                 if (!isShiftPressed) {
+
                     selectedIdsRef.current = []
                     selectedStrokeRef.current = null
+
+                    marqueeStartRef.current = {x,y}
+                    marqueeCurrentRef.current = {x,y}
+                    isMarqueeSelectingRef.current = true
+
                     drawGrid()
                     redraw()
                 }
@@ -509,7 +553,36 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             return 
         }
         if(tool === "select"){
-            if(selectedIdsRef.current.length > 0){
+            if(isMarqueeSelectingRef.current){
+                const start = marqueeStartRef.current
+                const end = marqueeCurrentRef.current
+
+                const bounds = {
+                    minX: Math.min(start.x, end.x),
+                    maxX: Math.max(start.x, end.x),
+                    minY: Math.min(start.y, end.y),
+                    maxY: Math.max(start.y, end.y),
+                }
+
+                const selected = strokeRef.current.filter(stroke => isStrokeInBounds(stroke, bounds)).map(stroke=> stroke.id)
+                selectedIdsRef.current = selected
+
+                if(selected.length === 1) {
+                    selectedStrokeRef.current = strokeRef.current.find(s=>s.id === selected[0]) || null
+                }
+                else{
+                    selectedStrokeRef.current = null
+                }
+
+                isMarqueeSelectingRef.current = false
+                marqueeCurrentRef.current= null
+                marqueeStartRef.current= null
+
+                drawGrid()
+                redraw()
+                return 
+            }
+            if(didMoveSelectionRef.current && selectedIdsRef.current.length > 0){
                 const movedStrokes = strokeRef.current.filter(s => 
                     selectedIdsRef.current.includes(s.id)
                 )
@@ -518,6 +591,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 )
                 // selectedStrokeRef.current = null
             }
+            didMoveSelectionRef.current = false
             activeHandleRef.current = null
             dragStartPointsRef.current = null
             multiDragStartRef.current = {}
@@ -545,6 +619,78 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         currentStrokeRef.current = null
         setIsDrawing(false)
     }
+    const duplicateSelectedStrokes = () => {
+        if (selectedIdsRef.current.length === 0) return
+
+        const OFFSET = 20
+
+        const selectedStrokes = strokeRef.current.filter(stroke =>
+            selectedIdsRef.current.includes(stroke.id)
+        )
+
+        const duplicated = selectedStrokes.map(stroke => ({
+            ...structuredClone(stroke),
+            id: crypto.randomUUID(),
+            points: stroke.points.map(p => ({
+                x: p.x + OFFSET,
+                y: p.y + OFFSET
+            }))
+        }))
+
+        
+        strokeRef.current.push(...duplicated)
+
+        
+        selectedIdsRef.current = duplicated.map(s => s.id)
+        selectedStrokeRef.current =
+            duplicated.length === 1 ? duplicated[0] : null
+
+        duplicated.forEach(stroke => {
+            socketRef.current.emit("stroke-complete", stroke)
+        })
+
+        drawGrid()
+        redraw()
+    }
+    const copySelectedStrokes = () => {
+        if(selectedIdsRef.current.length === 0) return 
+
+        const selectedStrokes = strokeRef.current.filter(stroke=>
+            selectedIdsRef.current.includes(stroke.id)
+        )
+
+        clipboardRef.current = structuredClone(selectedStrokes)
+    }
+    const pasteClipboardStrokes = () => {
+        if (!clipboardRef.current || clipboardRef.current.length === 0) return
+
+        const OFFSET = 20
+
+        const pasted = clipboardRef.current.map(stroke => ({
+            ...structuredClone(stroke),
+            id: crypto.randomUUID(),
+            points: stroke.points.map(p => ({
+                x: p.x + OFFSET,
+                y: p.y + OFFSET
+            }))
+        }))
+
+        strokeRef.current.push(...pasted)
+
+        selectedIdsRef.current = pasted.map(s => s.id)
+        selectedStrokeRef.current =
+            pasted.length === 1 ? pasted[0] : null
+
+        // update clipboard too, so repeated paste keeps stepping forward
+        clipboardRef.current = structuredClone(pasted)
+
+        pasted.forEach(stroke => {
+            socketRef.current.emit("stroke-complete", stroke)
+        })
+
+        drawGrid()
+        redraw()
+    }
     useEffect(() => {
         const handleDeleteSelected = () => {
             if (selectedIdsRef.current.length === 0) return
@@ -561,11 +707,27 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             drawGrid()
             redraw()
         }
+        const handleCopySelected = () => {
+            copySelectedStrokes()
+        }
 
+        const handlePasteSelected = () => {
+            pasteClipboardStrokes()
+        }
+        const handleDuplicateSelected = () =>{
+            duplicateSelectedStrokes()
+        }
+        window.addEventListener("duplicate-selected", handleDuplicateSelected)
         window.addEventListener("delete-selected", handleDeleteSelected)
-
+        window.addEventListener("copy-selected", handleCopySelected)
+        window.addEventListener("paste-selected", handlePasteSelected)
+        
         return () => {
             window.removeEventListener("delete-selected", handleDeleteSelected)
+            window.removeEventListener("duplicate-selected", handleDuplicateSelected)
+            window.removeEventListener("copy-selected", handleCopySelected)
+            window.removeEventListener("paste-selected", handlePasteSelected)
+            
         }
     }, [])
     return {

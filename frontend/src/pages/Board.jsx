@@ -44,7 +44,7 @@ const Board = () => {
         const canvas = gridCanvasRef.current
         const ctx = canvas.getContext("2d")
         ctx.clearRect(0,0, canvas.width, canvas.height)
-        const width = canvas.width
+        const width = canvas.width    
         const height = canvas.height
         
         const scale = scaleRef.current
@@ -232,7 +232,24 @@ const Board = () => {
             const isDelete  = e.key === "Delete" || e.key === "Backspace"
             if(isDelete) {
                 window.dispatchEvent(new CustomEvent("delete-selected"))
-            }     
+            }  
+            const isDuplicate = (e.ctrlKey || e.metaKey) && e.key === "d"   
+            if(isDuplicate){
+                e.preventDefault()
+                window.dispatchEvent(new CustomEvent("duplicate-selected"))
+            }
+            const isCopy = (e.ctrlKey || e.metaKey) && e.key === "c"
+            const isPaste = (e.ctrlKey || e.metaKey) && e.key === "v"
+
+            if (isCopy) {
+                e.preventDefault()
+                window.dispatchEvent(new CustomEvent("copy-selected"))
+            }
+
+            if (isPaste) {
+                e.preventDefault()
+                window.dispatchEvent(new CustomEvent("paste-selected"))
+            }
         }
         const handleKeyUp = (e)=>{
             if(e.code === "Space"){
