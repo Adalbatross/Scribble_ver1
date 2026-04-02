@@ -308,13 +308,15 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 }
             }
             if (stroke.tool === "text") {
-                const resizeStart = textResizeStartRef.current
+                if (!textResizeStartRef.current) return
 
-                if (resizeStart) {
-                    const dx = x - resizeStart.startX
-                    const newWidth = Math.max(4, resizeStart.startWidth + dx / 2.4)
-                    stroke.width = newWidth
-                }
+                const { startX, startWidth } = textResizeStartRef.current
+                const dx = x - startX
+
+                const sensitivity = 0.03
+                const newWidth = Math.max(2, startWidth + dx * sensitivity)
+
+                stroke.width = newWidth
             }
 
             redraw()   // 🚀 no need drawGrid
@@ -558,7 +560,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 tool: "text",
                 color,
                 width: brushSize,
-                text: "Text",
+                text: "",
                 points: [{ x, y }]
             }
 
@@ -570,6 +572,12 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
 
             drawGrid()
             redraw()
+
+            window.dispatchEvent(
+                new CustomEvent("open-text-editor", {
+                    detail: textStroke
+                })
+            )
             return
         }
         currentStrokeRef.current = {
@@ -640,6 +648,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             activeHandleRef.current = null
             dragStartPointsRef.current = null
             multiDragStartRef.current = {}
+            textResizeStartRef.current = null
             setIsDrawing(false)
             drawGrid()
             redraw()

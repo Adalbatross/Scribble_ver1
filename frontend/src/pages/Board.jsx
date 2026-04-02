@@ -286,6 +286,27 @@ const Board = () => {
             })
         }
     }, [textInput?.id])
+    useEffect(() => {
+        const handleOpenTextEditor = (e) => {
+            const stroke = e.detail
+            if (!stroke || stroke.tool !== "text") return
+
+            setTextInput({
+                id: stroke.id,
+                x: stroke.points[0].x,
+                y: stroke.points[0].y,
+                value: stroke.text || "",
+                color: stroke.color,
+                fontSize: stroke.width * 4
+            })
+        }
+
+        window.addEventListener("open-text-editor", handleOpenTextEditor)
+
+        return () => {
+            window.removeEventListener("open-text-editor", handleOpenTextEditor)
+        }
+    }, [])
     const saveTextEdit = () => {
         if (!textInput) return
 
@@ -296,9 +317,23 @@ const Board = () => {
             return
         }
 
+        const trimmed = textInput.value?.trim() || ""
+
+        if (!trimmed) {
+            const deletedId = textInput.id
+
+            strokeRef.current = strokeRef.current.filter(s => s.id !== deletedId)
+
+            socketRef.current.emit("stroke-delete", { id: deletedId })
+            drawGrid()
+            redraw()
+            setTextInput(null)
+            return
+        }
+
         const updatedStroke = {
             ...strokeRef.current[index],
-            text: textInput.value?.trim() || "Text"
+            text: trimmed
         }
 
         strokeRef.current[index] = updatedStroke
@@ -308,7 +343,31 @@ const Board = () => {
         redraw()
         setTextInput(null)
     }
+    useEffect(() => {
+        if (!textInput) return
 
+        // when tool changes while editing → save
+        return () => {
+            saveTextEdit()
+        }
+    }, [tool])
+
+    useEffect(() => {
+        window.__editingTextId = textInput?.id || null
+        drawGrid()
+        redraw()
+    }, [textInput])
+    const editorLines = (textInput?.value || "").split("\n")
+    const scaledFontSize = (textInput?.fontSize || 16) * scaleRef.current
+    const editorLineHeight = scaledFontSize * 1.2
+    const editorWidth = Math.max(
+        60,
+        ...editorLines.map(line => Math.max(1, line.length) * scaledFontSize * 0.6)
+    )
+    const editorHeight = Math.max(
+        editorLineHeight,
+        editorLines.length * editorLineHeight
+    )
     
 
 
@@ -418,9 +477,10 @@ const Board = () => {
 
                 const p = stroke.points[0]
                 const fontSize = stroke.width * 4
-                const text = stroke.text || "Text"
-                const width = text.length * fontSize * 0.6
-                const height = fontSize
+                const text = stroke.text || ""
+                const lines = text.split("\n")
+                const width = Math.max(...lines.map(line => Math.max(1, line.length) * fontSize * 0.6), 60)
+                const height = lines.length * fontSize * 1.2
 
                 return (
                     x >= p.x &&
@@ -436,7 +496,7 @@ const Board = () => {
                 id: clickedText.id,
                 x: clickedText.points[0].x,
                 y: clickedText.points[0].y,
-                value: clickedText.text || "Text",
+                value: clickedText.text || "",
                 color: clickedText.color,
                 fontSize: clickedText.width * 4
                 })
@@ -457,7 +517,7 @@ const Board = () => {
                     saveTextEdit()
                 }}
             >
-                <input
+                <textarea
                     ref={editorRef}
                     value={textInput.value}
                     onMouseDown={(e) => e.stopPropagation()}
@@ -469,30 +529,33 @@ const Board = () => {
                     }
                     onBlur={saveTextEdit}
                     onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                            e.preventDefault()
-                            saveTextEdit()
-                        }
-
                         if (e.key === "Escape") {
                             e.preventDefault()
                             setTextInput(null)
                         }
                     }}
-                    className="absolute bg-white outline-none border border-blue-400 px-1"
+                    className="absolute bg-transparent outline-none border-none resize-none overflow-hidden p-0 m-0"
                     style={{
                         left: offsetXRef.current + textInput.x * scaleRef.current,
                         top: offsetYRef.current + textInput.y * scaleRef.current,
                         fontSize: textInput.fontSize * scaleRef.current,
+                        lineHeight: `${textInput.fontSize * 1.2 * scaleRef.current}px`,
                         color: textInput.color,
-                        minWidth: "60px",
-                        width: `${Math.max(
-                            60,
-                            (textInput.value?.length || 1) *
-                            textInput.fontSize *
-                            0.6 *
-                            scaleRef.current
-                        )}px`
+                        fontFamily: "Arial",
+                        minWidth: "1px",
+                        width: `${editorWidth}px`,
+                        height: `${editorHeight}px`,
+                        whiteSpace: "pre-wrap",
+                        background: "transparent",
+                        border: "none",
+                        outline: "none",
+                        boxShadow: "none",
+                        resize: "none",
+                        overflow: "hidden",
+                        caretColor: textInput.color,
+                        WebkitAppearance: "none",
+                        MozAppearance: "none",
+                        appearance: "none"
                     }}
                 />
             </div>

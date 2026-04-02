@@ -76,20 +76,30 @@ export const drawStroke = (ctx, stroke) =>{
             ctx.stroke()
         }
         if (stroke.tool === "text" && stroke.points.length >= 1) {
+            if (window.__editingTextId && stroke.id === window.__editingTextId) return
+
             const p = stroke.points[0]
+            const lines = (stroke.text || "Text").split("\n")
+            const fontSize = stroke.width * 4
+            const lineHeight = fontSize * 1.2
 
             ctx.save()
             ctx.globalCompositeOperation = "source-over"
-            ctx.font = `${stroke.width * 4}px Arial`
+            ctx.font = `${fontSize}px Arial`
             ctx.fillStyle = stroke.color
             ctx.textBaseline = "top"
-            ctx.fillText(stroke.text || "Text", p.x, p.y)
+
+            lines.forEach((line, index) => {
+                ctx.fillText(line, p.x, p.y + index * lineHeight)
+            })
+
             ctx.restore()
         }
     }
 
 export const drawSelectionBox = (ctx, stroke,scale) =>{
     if(!stroke || stroke.points.length < 1) return 
+    if (stroke.tool === "text" && window.__editingTextId === stroke.id) return
 
     ctx.save()
     const handleSize = 6 / scale
@@ -98,16 +108,16 @@ export const drawSelectionBox = (ctx, stroke,scale) =>{
     ctx.setLineDash([8 / scale,4 / scale])
 
     if (stroke.tool === "text" && stroke.points.length >= 1) {
-        const p = stroke.points[0]
-        const text = stroke.text || "Text"
-        const fontSize = stroke.width * 4
-        const textWidth = text.length * fontSize * 0.6
-        const textHeight = fontSize
 
-        ctx.strokeRect(p.x, p.y, textWidth, textHeight)
+        const bounds = getTextBounds(stroke)
+        if (!bounds) return
+
+        const { x, y, width: textWidth, height: textHeight } = bounds
+
+        ctx.strokeRect(x, y, textWidth, textHeight)
 
         ctx.beginPath()
-        ctx.arc(p.x + textWidth, p.y + textHeight, handleSize, 0, Math.PI * 2)
+        ctx.arc(x + textWidth, y + textHeight, handleSize, 0, Math.PI * 2)
         ctx.fillStyle = "#0077FF"
         ctx.fill()
     }
@@ -198,7 +208,35 @@ export const drawSelectionBox = (ctx, stroke,scale) =>{
 
     ctx.restore() 
 }   
+const getTextBounds = (stroke) => {
+    if (!stroke || stroke.tool !== "text" || !stroke.points?.length) {
+        return null
+    }
 
+    const p = stroke.points[0]
+    const text = stroke.text || ""
+    const fontSize = stroke.width * 4
+    const lineHeight = fontSize * 1.2
+    const lines = text.split("\n")
+
+    const canvas = document.createElement("canvas")
+    const ctx = canvas.getContext("2d")
+    ctx.font = `${fontSize}px Arial`
+
+    const width = Math.max(
+        1,
+        ...lines.map(line => ctx.measureText(line || " ").width)
+    )
+
+    const height = Math.max(lineHeight, lines.length * lineHeight)
+
+    return {
+        x: p.x,
+        y: p.y,
+        width: width + 2,
+        height: height + 2
+    }
+}
 export const getStrokeAtPoint = (x,y, strokes, scale) =>{
     for (let i  = strokes.length -1; i>=0; i--){
         const stroke = strokes[i]
@@ -306,18 +344,16 @@ export const getStrokeAtPoint = (x,y, strokes, scale) =>{
         }
 
         if (stroke.tool === "text" && stroke.points.length >= 1) {
-            const p = stroke.points[0]
-            const text = stroke.text || "Text"
-            const fontSize = stroke.width * 4
+            const bounds = getTextBounds(stroke)
+            if (!bounds) continue
 
-            const textWidth = text.length * fontSize * 0.6
-            const textHeight = fontSize
+            const { x: bx, y: by, width, height } = bounds
 
             if (
-                x >= p.x &&
-                x <= p.x + textWidth &&
-                y >= p.y &&
-                y <= p.y + textHeight
+                x >= bx &&
+                x <= bx + width &&
+                y >= by &&
+                y <= by + height
             ) {
                 return stroke
             }
@@ -367,14 +403,13 @@ export const getHandleAtPoint = (x, y, stroke,scale) => {
     }
 
     if (stroke.tool === "text" && stroke.points.length >= 1) {
-        const p = stroke.points[0]
-        const text = stroke.text || "Text"
-        const fontSize = stroke.width * 4
-        const textWidth = text.length * fontSize * 0.6
-        const textHeight = fontSize
+        const bounds = getTextBounds(stroke)
+        if (!bounds) return null
 
-        const handleX = p.x + textWidth
-        const handleY = p.y + textHeight
+        const { x: bx, y: by, width, height } = bounds
+
+        const handleX = bx + width
+        const handleY = by + height
 
         const dx = x - handleX
         const dy = y - handleY
@@ -399,14 +434,13 @@ export const getGroupBounds = (strokes) => {
         if (!stroke.points || stroke.points.length === 0) return
 
         if (stroke.tool === "text") {
-            const p = stroke.points[0]
-            const text = stroke.text || "Text"
-            const fontSize = stroke.width * 4
+            const bounds = getTextBounds(stroke)
+            if (!bounds) return
 
-            minX = Math.min(minX, p.x)
-            minY = Math.min(minY, p.y)
-            maxX = Math.max(maxX, p.x + text.length * fontSize * 0.6)
-            maxY = Math.max(maxY, p.y + fontSize)
+            minX = Math.min(minX, bounds.x)
+            minY = Math.min(minY, bounds.y)
+            maxX = Math.max(maxX, bounds.x + bounds.width)
+            maxY = Math.max(maxY, bounds.y + bounds.height)
         } else {
             const xs = stroke.points.map(p => p.x)
             const ys = stroke.points.map(p => p.y)
@@ -439,14 +473,13 @@ export const isStrokeInBounds = (stroke, bounds) => {
     let minX, maxX, minY, maxY
 
     if (stroke.tool === "text") {
-        const p = stroke.points[0]
-        const text = stroke.text || "Text"
-        const fontSize = stroke.width * 4
+        const boundsObj = getTextBounds(stroke)
+        if (!boundsObj) return false
 
-        minX = p.x
-        maxX = p.x + text.length * fontSize * 0.6
-        minY = p.y
-        maxY = p.y + fontSize
+        minX = boundsObj.x
+        minY = boundsObj.y
+        maxX = boundsObj.x + boundsObj.width
+        maxY = boundsObj.y + boundsObj.height
     } else {
         const xs = stroke.points.map(p => p.x)
         const ys = stroke.points.map(p => p.y)
