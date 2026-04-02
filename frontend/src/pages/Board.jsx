@@ -20,6 +20,9 @@ const Board = () => {
     const [tool, setTool] = useState("select")
     const [color, setColor] = useState("black")
     const [brushSize, setBrushSize] = useState(5)
+    const [textInput, setTextInput] = useState(null)
+    const editorRef= useRef(null)
+    const isEditingRef = useRef(false)
     const [copied, setCopied] = useState(false)
     const [users, setUsers] = useState([])
     if(! userIdRef.current){
@@ -105,7 +108,7 @@ const Board = () => {
     }
     const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef, offsetYRef, handlers, 
 
-    } = useCanvasInteractions(tool, color, brushSize, socketRef, drawGrid, spacePressRef, userIdRef)
+    } = useCanvasInteractions(tool, color, brushSize, socketRef, drawGrid, spacePressRef, userIdRef,)
 
     useEffect(() => {
         const canvas = canvasRef.current
@@ -213,6 +216,7 @@ const Board = () => {
             redraw()
         }
         const handleKeyDown = (e)=>{
+            if(isEditingRef.current) return 
             if(e.code === "Space"){
                 spacePressRef.current = true
                 canvasRef.current.style.cursor = "grab"
@@ -252,6 +256,7 @@ const Board = () => {
             }
         }
         const handleKeyUp = (e)=>{
+            if(isEditingRef.current) return
             if(e.code === "Space"){
                 spacePressRef.current = false
                 canvasRef.current.style.cursor = "default"
@@ -268,6 +273,41 @@ const Board = () => {
             socketRef.current.disconnect()
         }
     }, [id])
+    useEffect(()=>{
+        isEditingRef.current = !!textInput
+    }, [textInput])
+    useEffect(() => {
+        if (textInput && editorRef.current) {
+            requestAnimationFrame(() => {
+                if (editorRef.current) {
+                    editorRef.current.focus()
+                    editorRef.current.select()
+                }
+            })
+        }
+    }, [textInput?.id])
+    const saveTextEdit = () => {
+        if (!textInput) return
+
+        const index = strokeRef.current.findIndex(s => s.id === textInput.id)
+
+        if (index === -1) {
+            setTextInput(null)
+            return
+        }
+
+        const updatedStroke = {
+            ...strokeRef.current[index],
+            text: textInput.value?.trim() || "Text"
+        }
+
+        strokeRef.current[index] = updatedStroke
+
+        socketRef.current.emit("stroke-move", updatedStroke)
+        drawGrid()
+        redraw()
+        setTextInput(null)
+    }
 
     
 
@@ -348,14 +388,61 @@ const Board = () => {
         
         {/* Canvas Area */}
         <div className="absolute inset-0 bg-gray-100">
-            <canvas className="absolute inset-0 w-full h-full"
+            <canvas
+            className="absolute inset-0 w-full h-full"
             ref={canvasRef}
-            onMouseDown={handlers.onMouseDown}
-            onMouseMove={handlers.onMouseMove}
-            onMouseUp={handlers.onMouseUp}
-            onMouseLeave={handlers.onMouseLeave}
-            style={{zIndex: 2, border: "2px solid red"}}
-        />
+            onMouseDown={(e) => {
+                if (textInput) {
+                e.preventDefault()
+                e.stopPropagation()
+                return
+                }
+                handlers.onMouseDown(e)
+            }}
+            onMouseMove={(e) => {
+                if (textInput) return
+                handlers.onMouseMove(e)
+            }}
+            onMouseUp={(e) => {
+                if (textInput) return
+                handlers.onMouseUp(e)
+            }}    
+            onDoubleClick={(e) => {
+                if(tool !== "select") return
+                const rect = canvasRef.current.getBoundingClientRect()
+                const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current
+                const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current
+
+                const clickedText = strokeRef.current.findLast((stroke) => {
+                if (stroke.tool !== "text" || !stroke.points?.length) return false
+
+                const p = stroke.points[0]
+                const fontSize = stroke.width * 4
+                const text = stroke.text || "Text"
+                const width = text.length * fontSize * 0.6
+                const height = fontSize
+
+                return (
+                    x >= p.x &&
+                    x <= p.x + width &&
+                    y >= p.y &&
+                    y <= p.y + height
+                )
+                })
+
+                if (!clickedText) return
+
+                setTextInput({
+                id: clickedText.id,
+                x: clickedText.points[0].x,
+                y: clickedText.points[0].y,
+                value: clickedText.text || "Text",
+                color: clickedText.color,
+                fontSize: clickedText.width * 4
+                })
+            }}
+            style={{ zIndex: 2 }}
+            />
             <canvas 
             ref={gridCanvasRef}
             className='absolute inset-0 w-full h-full pointer-events-none'
@@ -363,6 +450,53 @@ const Board = () => {
             />
              {/* Drawing canvas */}
         </div>
+        {textInput && (
+            <div
+                className="absolute inset-0 z-50"
+                onMouseDown={() => {
+                    saveTextEdit()
+                }}
+            >
+                <input
+                    ref={editorRef}
+                    value={textInput.value}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onChange={(e) =>
+                        setTextInput(prev => ({
+                            ...prev,
+                            value: e.target.value
+                        }))
+                    }
+                    onBlur={saveTextEdit}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            e.preventDefault()
+                            saveTextEdit()
+                        }
+
+                        if (e.key === "Escape") {
+                            e.preventDefault()
+                            setTextInput(null)
+                        }
+                    }}
+                    className="absolute bg-white outline-none border border-blue-400 px-1"
+                    style={{
+                        left: offsetXRef.current + textInput.x * scaleRef.current,
+                        top: offsetYRef.current + textInput.y * scaleRef.current,
+                        fontSize: textInput.fontSize * scaleRef.current,
+                        color: textInput.color,
+                        minWidth: "60px",
+                        width: `${Math.max(
+                            60,
+                            (textInput.value?.length || 1) *
+                            textInput.fontSize *
+                            0.6 *
+                            scaleRef.current
+                        )}px`
+                    }}
+                />
+            </div>
+        )}
 
     </div>
   )

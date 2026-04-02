@@ -75,10 +75,21 @@ export const drawStroke = (ctx, stroke) =>{
             ctx.arc(p1.x, p1.y, radius, 0, Math.PI * 2)
             ctx.stroke()
         }
+        if (stroke.tool === "text" && stroke.points.length >= 1) {
+            const p = stroke.points[0]
+
+            ctx.save()
+            ctx.globalCompositeOperation = "source-over"
+            ctx.font = `${stroke.width * 4}px Arial`
+            ctx.fillStyle = stroke.color
+            ctx.textBaseline = "top"
+            ctx.fillText(stroke.text || "Text", p.x, p.y)
+            ctx.restore()
+        }
     }
 
 export const drawSelectionBox = (ctx, stroke,scale) =>{
-    if(!stroke || stroke.points.length < 2) return 
+    if(!stroke || stroke.points.length < 1) return 
 
     ctx.save()
     const handleSize = 6 / scale
@@ -86,6 +97,20 @@ export const drawSelectionBox = (ctx, stroke,scale) =>{
     ctx.lineWidth  = 2 / scale
     ctx.setLineDash([8 / scale,4 / scale])
 
+    if (stroke.tool === "text" && stroke.points.length >= 1) {
+        const p = stroke.points[0]
+        const text = stroke.text || "Text"
+        const fontSize = stroke.width * 4
+        const textWidth = text.length * fontSize * 0.6
+        const textHeight = fontSize
+
+        ctx.strokeRect(p.x, p.y, textWidth, textHeight)
+
+        ctx.beginPath()
+        ctx.arc(p.x + textWidth, p.y + textHeight, handleSize, 0, Math.PI * 2)
+        ctx.fillStyle = "#0077FF"
+        ctx.fill()
+    }
 
     //  RECT
     if (stroke.tool === "rect") {
@@ -279,12 +304,30 @@ export const getStrokeAtPoint = (x,y, strokes, scale) =>{
             }
 
         }
+
+        if (stroke.tool === "text" && stroke.points.length >= 1) {
+            const p = stroke.points[0]
+            const text = stroke.text || "Text"
+            const fontSize = stroke.width * 4
+
+            const textWidth = text.length * fontSize * 0.6
+            const textHeight = fontSize
+
+            if (
+                x >= p.x &&
+                x <= p.x + textWidth &&
+                y >= p.y &&
+                y <= p.y + textHeight
+            ) {
+                return stroke
+            }
+        }
     }
     return null
 }
 
 export const getHandleAtPoint = (x, y, stroke,scale) => {
-    if (!stroke || stroke.points.length < 2) return null
+    if (!stroke || stroke.points.length < 1) return null
 
     const radius = 10 / scale
 
@@ -323,6 +366,24 @@ export const getHandleAtPoint = (x, y, stroke,scale) => {
         if (Math.hypot(x - p2.x, y - p2.y) <= radius) return "radius"
     }
 
+    if (stroke.tool === "text" && stroke.points.length >= 1) {
+        const p = stroke.points[0]
+        const text = stroke.text || "Text"
+        const fontSize = stroke.width * 4
+        const textWidth = text.length * fontSize * 0.6
+        const textHeight = fontSize
+
+        const handleX = p.x + textWidth
+        const handleY = p.y + textHeight
+
+        const dx = x - handleX
+        const dy = y - handleY
+
+        if (Math.sqrt(dx * dx + dy * dy) <= radius) {
+            return "br"
+        }
+    }
+
     return null
 }
 
@@ -337,13 +398,24 @@ export const getGroupBounds = (strokes) => {
     strokes.forEach((stroke) => {
         if (!stroke.points || stroke.points.length === 0) return
 
-        const xs = stroke.points.map(p => p.x)
-        const ys = stroke.points.map(p => p.y)
+        if (stroke.tool === "text") {
+            const p = stroke.points[0]
+            const text = stroke.text || "Text"
+            const fontSize = stroke.width * 4
 
-        minX = Math.min(minX, ...xs)
-        minY = Math.min(minY, ...ys)
-        maxX = Math.max(maxX, ...xs)
-        maxY = Math.max(maxY, ...ys)
+            minX = Math.min(minX, p.x)
+            minY = Math.min(minY, p.y)
+            maxX = Math.max(maxX, p.x + text.length * fontSize * 0.6)
+            maxY = Math.max(maxY, p.y + fontSize)
+        } else {
+            const xs = stroke.points.map(p => p.x)
+            const ys = stroke.points.map(p => p.y)
+
+            minX = Math.min(minX, ...xs)
+            minY = Math.min(minY, ...ys)
+            maxX = Math.max(maxX, ...xs)
+            maxY = Math.max(maxY, ...ys)
+        }
     })
 
     return { minX, minY, maxX, maxY }
@@ -364,13 +436,26 @@ export const isPointInGroupBounds = (x, y , bounds, scale = 1) => {
 export const isStrokeInBounds = (stroke, bounds) => {
     if (!stroke.points || stroke.points.length === 0) return false
 
-    const xs = stroke.points.map(p=> p.x)
-    const ys = stroke.points.map(p=> p.y)
+    let minX, maxX, minY, maxY
 
-    const minX = Math.min(...xs)
-    const maxX = Math.max(...xs)
-    const minY = Math.min(...ys)
-    const maxY = Math.max(...ys)
+    if (stroke.tool === "text") {
+        const p = stroke.points[0]
+        const text = stroke.text || "Text"
+        const fontSize = stroke.width * 4
+
+        minX = p.x
+        maxX = p.x + text.length * fontSize * 0.6
+        minY = p.y
+        maxY = p.y + fontSize
+    } else {
+        const xs = stroke.points.map(p => p.x)
+        const ys = stroke.points.map(p => p.y)
+
+        minX = Math.min(...xs)
+        maxX = Math.max(...xs)
+        minY = Math.min(...ys)
+        maxY = Math.max(...ys)
+    }
 
     return !(
         maxX < bounds.minX || 

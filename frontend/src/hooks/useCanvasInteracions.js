@@ -9,7 +9,9 @@ import {
     isStrokeInBounds
 } from "../utils/canvasUtils"
 
-export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGrid,spacePressRef, userIdRef) => {
+export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGrid,spacePressRef, userIdRef, 
+    // isEditingRef
+) => {
 
     const canvasRef = useRef(null)
     const gridCanvasRef = useRef(null)
@@ -28,6 +30,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
     const isErasingRef = useRef(false)
     const dragStartPointsRef = useRef(null)
     const lastErasedRef = useRef(null)
+    const textResizeStartRef = useRef(null)
     const selectedIdsRef = useRef([])
     const multiDragStartRef = useRef({})
     const marqueeStartRef = useRef(null)
@@ -175,6 +178,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
     // handle mouse move hook
 
     const handleMouseMove = (e) => {
+        // if (isEditingRef?.current) return
         if(isPanningRef.current){
             const dx = e.clientX - panStartRef.current.x
             const dy = e.clientY - panStartRef.current.y
@@ -303,6 +307,15 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                     radiusPoint.y += dy
                 }
             }
+            if (stroke.tool === "text") {
+                const resizeStart = textResizeStartRef.current
+
+                if (resizeStart) {
+                    const dx = x - resizeStart.startX
+                    const newWidth = Math.max(4, resizeStart.startWidth + dx / 2.4)
+                    stroke.width = newWidth
+                }
+            }
 
             redraw()   // 🚀 no need drawGrid
             return
@@ -375,6 +388,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
     // handle mouse down hook
 
     const handleMouseDown = (e) => {
+        // if(isEditingRef?.current) return
         const isShiftPressed = e.shiftKey
         if(spacePressRef.current){
             isPanningRef.current = true
@@ -416,6 +430,14 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 socketRef.current.emit("stroke-move-start")
                 const stroke = hoveredStrokeRef.current
                 const handle = hoveredHandleRef.current
+                textResizeStartRef.current = null
+
+                if (stroke.tool === "text" && handle === "br") {
+                    textResizeStartRef.current = {
+                        startX: x,
+                        startWidth: stroke.width
+                    }
+                }
                 dragStartPointsRef.current = structuredClone(stroke.points)
                 let anchor = null
 
@@ -529,6 +551,27 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             
             return
         }
+        if (tool === "text") {
+            const textStroke = {
+                id: crypto.randomUUID(),
+                userId: userIdRef.current,
+                tool: "text",
+                color,
+                width: brushSize,
+                text: "Text",
+                points: [{ x, y }]
+            }
+
+            strokeRef.current.push(textStroke)
+            socketRef.current.emit("stroke-complete", textStroke)
+
+            selectedIdsRef.current = [textStroke.id]
+            selectedStrokeRef.current = textStroke
+
+            drawGrid()
+            redraw()
+            return
+        }
         currentStrokeRef.current = {
             id: crypto.randomUUID(),
             userId: userIdRef.current,
@@ -548,6 +591,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
     // handle mouse up hook
 
     const handleMouseUp = () => {
+        // if (isEditingRef?.current) return 
         if(isPanningRef.current){
             isPanningRef.current = false
             return 
@@ -577,6 +621,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 isMarqueeSelectingRef.current = false
                 marqueeCurrentRef.current= null
                 marqueeStartRef.current= null
+                textResizeStartRef.current = null
 
                 drawGrid()
                 redraw()
