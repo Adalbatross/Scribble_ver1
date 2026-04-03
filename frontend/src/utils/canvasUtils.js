@@ -102,6 +102,8 @@ export const drawSelectionBox = (ctx, stroke,scale) =>{
     if (stroke.tool === "text" && window.__editingTextId === stroke.id) return
 
     ctx.save()
+    ctx.globalCompositeOperation = "source-over"
+    ctx.globalAlpha = 1
     const handleSize = 6 / scale
     ctx.strokeStyle = "#1E90FF"
     ctx.lineWidth  = 2 / scale
@@ -205,7 +207,8 @@ export const drawSelectionBox = (ctx, stroke,scale) =>{
         ctx.fillStyle = "#0077FF"
         ctx.fill()
     }
-
+    
+    ctx.setLineDash([])
     ctx.restore() 
 }   
 const getTextBounds = (stroke) => {

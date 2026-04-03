@@ -143,6 +143,28 @@ io.on("connection", (socket) => {
 
         socket.broadcast.to(roomId).emit("stroke-delete", {id})
     })
+    
+    socket.on("strokes-reorder", async (updatedStrokes) => {
+        try {
+            const roomId = socket.data.roomId
+            if (!roomId || !rooms[roomId]) return
+
+            roomUndo[roomId].push(structuredClone(rooms[roomId]))
+            if (roomUndo[roomId].length > MAX_UNDO) {
+                roomUndo[roomId].shift()
+            }
+
+            roomRedo[roomId] = []
+
+            rooms[roomId] = updatedStrokes
+
+            scheduleSave(roomId)
+
+            socket.broadcast.to(roomId).emit("strokes-reordered", updatedStrokes)
+        } catch (err) {
+            console.error("Error reordering strokes:", err)
+        }
+    })
 
     socket.on("undo", () => {
         const roomId = socket.data.roomId

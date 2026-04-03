@@ -106,7 +106,7 @@ const Board = () => {
         ctx.restore() 
         
     }
-    const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef, offsetYRef, handlers, 
+    const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef, offsetYRef, handlers,bringForward, sendBackward 
 
     } = useCanvasInteractions(tool, color, brushSize, socketRef, drawGrid, spacePressRef, userIdRef,)
 
@@ -175,6 +175,12 @@ const Board = () => {
             drawGrid()
             redraw()
         })
+        socketRef.current.on("strokes-reordered", (updatedStroke)=>{
+            strokeRef.current = updatedStroke
+            drawGrid()
+            redraw()
+        })
+
         socketRef.current.on("delete-selected", (ids) => {
             strokeRef.current = strokeRef.current.filter(
                 stroke => !ids.includes(stroke.id)
@@ -253,6 +259,17 @@ const Board = () => {
             if (isPaste) {
                 e.preventDefault()
                 window.dispatchEvent(new CustomEvent("paste-selected"))
+            }
+            const isBringFront = (e.ctrlKey || e.metaKey) && e.key === "]"
+            const isSendToBack = (e.ctrlKey || e.metaKey) && e.key === "["
+
+            if(isBringFront){
+                e.preventDefault()
+                bringForward()
+            }
+            if(isSendToBack){
+                e.preventDefault()
+                sendBackward()
             }
         }
         const handleKeyUp = (e)=>{
@@ -401,6 +418,8 @@ const Board = () => {
             setColor={setColor}
             brushSize={brushSize}
             setBrushSize={setBrushSize}
+            onBringForward={bringForward}
+            onSendBackward={sendBackward}
         />
         </div>
 

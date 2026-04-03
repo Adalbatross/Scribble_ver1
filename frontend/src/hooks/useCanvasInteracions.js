@@ -149,30 +149,37 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         if(currentStrokeRef.current){
             drawStroke(ctx, currentStrokeRef.current, scaleRef.current)
         }
-        if(isMarqueeSelectingRef.current && marqueeStartRef.current && marqueeCurrentRef.current){
+        if (isMarqueeSelectingRef.current && marqueeStartRef.current && marqueeCurrentRef.current) {
             const start = marqueeStartRef.current
             const current = marqueeCurrentRef.current
 
-            const minX  = Math.min(start.x, current.x)
-            const minY  = Math.min(start.y, current.y)
-            const width  = Math.abs(start.x - current.x)
-            const height  = Math.abs(start.y - current.y)
+            const minX = Math.min(start.x, current.x)
+            const minY = Math.min(start.y, current.y)
+            const width = Math.abs(start.x - current.x)
+            const height = Math.abs(start.y - current.y)
 
             ctx.save()
+
+            // hard reset all drawing state for marquee
+            ctx.globalCompositeOperation = "source-over"
+            ctx.globalAlpha = 1
             ctx.strokeStyle = "#3b82f6"
+            ctx.fillStyle = "rgba(59, 130, 246, 0.08)"
             ctx.lineWidth = 1.5 / scaleRef.current
             ctx.setLineDash([6 / scaleRef.current, 4 / scaleRef.current])
+            ctx.lineCap = "butt"
+            ctx.lineJoin = "miter"
+
+            ctx.fillRect(minX, minY, width, height)
             ctx.strokeRect(minX, minY, width, height)
 
-            ctx.fillStyle = "rgba(59, 130, 246, 0.08)"
-            ctx.fillRect(minX, minY, width, height)
-
+            ctx.setLineDash([])
             ctx.restore()
-
-
         }
         ctx.restore()
         ctx.globalCompositeOperation = "source-over"
+        ctx.globalAlpha = 1
+        ctx.setLineDash([])
     }
 
     // handle mouse move hook
@@ -745,6 +752,43 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         drawGrid()
         redraw()
     }
+    const bringForward = () => {
+        if (selectedIdsRef.current.length === 0) return
+
+        const strokes = [...strokeRef.current]
+        const selectedSet = new Set(selectedIdsRef.current)
+
+        for (let i = strokes.length - 2; i >= 0; i--) {
+            if (selectedSet.has(strokes[i].id) && !selectedSet.has(strokes[i + 1].id)) {
+                ;[strokes[i], strokes[i + 1]] = [strokes[i + 1], strokes[i]]
+            }
+        }
+
+        strokeRef.current = strokes
+        socketRef.current.emit("strokes-reorder", strokeRef.current)
+
+        drawGrid()
+        redraw()
+    }
+
+    const sendBackward = () => {
+        if (selectedIdsRef.current.length === 0) return
+
+        const strokes = [...strokeRef.current]
+        const selectedSet = new Set(selectedIdsRef.current)
+
+        for (let i = 1; i < strokes.length; i++) {
+            if (selectedSet.has(strokes[i].id) && !selectedSet.has(strokes[i - 1].id)) {
+                ;[strokes[i], strokes[i - 1]] = [strokes[i - 1], strokes[i]]
+            }
+        }
+
+        strokeRef.current = strokes
+        socketRef.current.emit("strokes-reorder", strokeRef.current)
+
+        drawGrid()
+        redraw()
+    }
     useEffect(() => {
         const handleDeleteSelected = () => {
             if (selectedIdsRef.current.length === 0) return
@@ -794,6 +838,8 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         // redo,
         offsetXRef,
         offsetYRef,
+        bringForward,
+        sendBackward,
         handlers: {
             onMouseDown: handleMouseDown,
             onMouseMove: handleMouseMove,
