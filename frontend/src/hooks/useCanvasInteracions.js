@@ -108,7 +108,18 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         ctx.translate(offsetXRef.current, offsetYRef.current)
         ctx.scale(scaleRef.current, scaleRef.current)
         strokeRef.current.forEach(stroke => {
+            const isHovered = hoveredStrokeRef.current?.id === stroke.id
+
+            if (isHovered) {
+                ctx.save()
+                ctx.globalAlpha = 0.8
+            }
+
             drawStroke(ctx, stroke, scaleRef.current)
+
+            if (isHovered) {
+                ctx.restore()
+            }
         })
         // if(selectedStrokeRef.current){
         //     drawSelectionBox(ctx, selectedStrokeRef.current, scaleRef.current)
@@ -228,24 +239,62 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             }
             return 
         }
-        if(!isDrawing) {
+        if (!isDrawing) {
             let hoveredHandle = null
             let hoveredStroke = null
 
-            for(let i = strokeRef.current.length - 1; i>=0; i--){
+            // 1️⃣ Check handles first (highest priority)
+            for (let i = strokeRef.current.length - 1; i >= 0; i--) {
                 const s = strokeRef.current[i]
-                const handle = getHandleAtPoint(x,y,s,scaleRef.current)
+                const handle = getHandleAtPoint(x, y, s, scaleRef.current)
 
-                if(handle){
+                if (handle) {
                     hoveredHandle = handle
                     hoveredStroke = s
                     break
                 }
             }
+
+            // 2️⃣ If no handle → check stroke hover
+            if (!hoveredHandle) {
+                hoveredStroke = getStrokeAtPoint(
+                    x,
+                    y,
+                    strokeRef.current,
+                    scaleRef.current
+                )
+            }
+
             hoveredHandleRef.current = hoveredHandle
             hoveredStrokeRef.current = hoveredStroke
-            
-            updateCursor(hoveredHandle)
+
+            if (selectedIdsRef.current.length > 1) {
+                const selectedStrokes = strokeRef.current.filter(s =>
+                    selectedIdsRef.current.includes(s.id)
+                )
+
+                const bounds = getGroupBounds(selectedStrokes)
+
+                if (isPointInGroupBounds(x, y, bounds, scaleRef.current)) {
+                    canvasRef.current.style.cursor = "move"
+                    return
+                }
+            }
+
+            // 3️⃣ Decide cursor
+            if (hoveredHandle) {
+                updateCursor(hoveredHandle)
+            } 
+            else if (hoveredStroke) {
+                if (selectedIdsRef.current.includes(hoveredStroke.id)) {
+                    canvasRef.current.style.cursor = "move"
+                } else {
+                    canvasRef.current.style.cursor = "pointer"
+                }
+            } 
+            else {
+                canvasRef.current.style.cursor = "default"
+            }
         }
         if(tool === 'select' && isMarqueeSelectingRef.current){
             marqueeCurrentRef.current = {x, y}

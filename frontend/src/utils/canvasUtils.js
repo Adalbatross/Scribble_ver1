@@ -474,7 +474,46 @@ export const isStrokeInBounds = (stroke, bounds) => {
     if (!stroke.points || stroke.points.length === 0) return false
 
     let minX, maxX, minY, maxY
+    if (stroke.tool === "rect") {
+        const p1 = stroke.points[0]
+        const p2 = stroke.points[1]
 
+        const rMinX = Math.min(p1.x, p2.x)
+        const rMaxX = Math.max(p1.x, p2.x)
+        const rMinY = Math.min(p1.y, p2.y)
+        const rMaxY = Math.max(p1.y, p2.y)
+
+        const marqueeOverlapsX = bounds.maxX >= rMinX && bounds.minX <= rMaxX
+        const marqueeOverlapsY = bounds.maxY >= rMinY && bounds.minY <= rMaxY
+
+        const touchesLeft   = bounds.minX <= rMinX && bounds.maxX >= rMinX && marqueeOverlapsY
+        const touchesRight  = bounds.minX <= rMaxX && bounds.maxX >= rMaxX && marqueeOverlapsY
+        const touchesTop    = bounds.minY <= rMinY && bounds.maxY >= rMinY && marqueeOverlapsX
+        const touchesBottom = bounds.minY <= rMaxY && bounds.maxY >= rMaxY && marqueeOverlapsX
+
+        return touchesLeft || touchesRight || touchesTop || touchesBottom
+    }
+    // if (stroke.tool === "circle") {
+    //     const p1 = stroke.points[0] // center
+    //     const p2 = stroke.points[1] // radius point
+
+    //     const dx = p2.x - p1.x
+    //     const dy = p2.y - p1.y
+    //     const radius = Math.sqrt(dx * dx + dy * dy)
+
+    //     // closest point on marquee bounds to circle center
+    //     const nearestX = Math.max(bounds.minX, Math.min(p1.x, bounds.maxX))
+    //     const nearestY = Math.max(bounds.minY, Math.min(p1.y, bounds.maxY))
+
+    //     const distToCenter = Math.sqrt((nearestX - p1.x) ** 2 + (nearestY - p1.y) ** 2)
+
+    //     // marquee must touch the arc edge, not just be inside the circle
+    //     const centerInsideMarquee = 
+    //         p1.x >= bounds.minX && p1.x <= bounds.maxX &&
+    //         p1.y >= bounds.minY && p1.y <= bounds.maxY
+
+    //     return distToCenter <= radius && !centerInsideMarquee
+    // }
     if (stroke.tool === "text") {
         const boundsObj = getTextBounds(stroke)
         if (!boundsObj) return false
@@ -483,7 +522,21 @@ export const isStrokeInBounds = (stroke, bounds) => {
         minY = boundsObj.y
         maxX = boundsObj.x + boundsObj.width
         maxY = boundsObj.y + boundsObj.height
-    } else {
+    }
+    // if (stroke.tool === "circle") {
+    //     const p1 = stroke.points[0]
+    //     const p2 = stroke.points[1]
+
+    //     const dx = p2.x - p1.x
+    //     const dy = p2.y - p1.y
+    //     const radius = Math.sqrt(dx*dx + dy*dy)
+
+    //     minX = p1.x - radius
+    //     maxX = p1.x + radius
+    //     minY = p1.y - radius
+    //     maxY = p1.y + radius
+    // } 
+    else {
         const xs = stroke.points.map(p => p.x)
         const ys = stroke.points.map(p => p.y)
 
@@ -494,9 +547,9 @@ export const isStrokeInBounds = (stroke, bounds) => {
     }
 
     return !(
-        maxX < bounds.minX || 
-        minX > bounds.maxX || 
-        maxY < bounds.minY ||
-        minY > bounds.maxY
+        maxX <= bounds.minX || 
+        minX >= bounds.maxX || 
+        maxY <= bounds.minY ||
+        minY >= bounds.maxY
     )
 }
