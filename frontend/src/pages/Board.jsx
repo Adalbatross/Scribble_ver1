@@ -106,7 +106,7 @@ const Board = () => {
         ctx.restore() 
         
     }
-    const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef, offsetYRef, handlers,bringForward, sendBackward 
+    const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef, offsetYRef, handlers,bringForward, sendBackward, groupSelectedStrokes, ungroupSelectedStrokes, 
 
     } = useCanvasInteractions(tool, color, brushSize, socketRef, drawGrid, spacePressRef, userIdRef,)
 
@@ -162,6 +162,11 @@ const Board = () => {
                 drawGrid()
                 redraw()
             }
+        })
+        socketRef.current.on("strokes-add-bulk", (newStrokes) => {
+            strokeRef.current.push(...newStrokes)
+            drawGrid()
+            redraw()
         })
         socketRef.current.on("strokes-move", (updatedStrokes) => {
             updatedStrokes.forEach((updatedStroke) => {
@@ -270,6 +275,18 @@ const Board = () => {
             if(isSendToBack){
                 e.preventDefault()
                 sendBackward()
+            }
+
+            const isGroup = (e.ctrlKey || e.metaKey && e.key.toLowerCase() === "g")
+            const isUnGroup = (e.ctrlKey || e.metaKey && e.shiftKey && e.key.toLowerCase() === "g")
+
+            if(isGroup){
+                e.preventDefault()
+                window.dispatchEvent(new CustomEvent("group-selected"))
+            }
+            if(isUnGroup){
+                e.preventDefault()
+                window.dispatchEvent(new CustomEvent("ungroup-selected"))
             }
         }
         const handleKeyUp = (e)=>{
@@ -420,6 +437,8 @@ const Board = () => {
             setBrushSize={setBrushSize}
             onBringForward={bringForward}
             onSendBackward={sendBackward}
+            onGroup={groupSelectedStrokes}
+            onUngroup={ungroupSelectedStrokes}
         />
         </div>
 

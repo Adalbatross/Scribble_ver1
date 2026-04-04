@@ -38,6 +38,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
     const isMarqueeSelectingRef = useRef(false)
     const didMoveSelectionRef= useRef(false)
     const clipboardRef = useRef([])
+    const groupFlashRef = useRef(false)
     // const undoStackRef = useRef([])
     // const redoStackRef = useRef([])
     // const cloneStrokes = () => {
@@ -95,7 +96,20 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
 }
 
     // redraw function that redraws the canvas everytime
+    const triggerGroupFlash = () => {
+        let flashCount = 0
+        const interval = setInterval(() => {
+            groupFlashRef.current = !groupFlashRef.current
+            redraw()
 
+            flashCount++
+            if (flashCount > 3) {
+                clearInterval(interval)
+                groupFlashRef.current = false
+                redraw()
+            }
+        }, 80)// 🔥 duration of blink (adjust if needed)
+    }
     const redraw = () => {
         const canvas = canvasRef.current
         const ctx = canvas.getContext("2d")
@@ -124,11 +138,18 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         // if(selectedStrokeRef.current){
         //     drawSelectionBox(ctx, selectedStrokeRef.current, scaleRef.current)
         // }
+// ✅ Multi selection → show BOTH outer box + inner boxes
         if (selectedIdsRef.current.length > 1) {
             const selectedStrokes = strokeRef.current.filter(s =>
                 selectedIdsRef.current.includes(s.id)
             )
 
+            // 1️⃣ Draw inner selection boxes for each selected stroke
+            selectedStrokes.forEach((stroke) => {
+                drawSelectionBox(ctx, stroke, scaleRef.current)
+            })
+
+            // 2️⃣ Draw outer combined bounding box
             const bounds = getGroupBounds(selectedStrokes)
 
             if (bounds) {
@@ -136,7 +157,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 const padding = 10 / scaleRef.current
 
                 ctx.save()
-                ctx.strokeStyle = "#3b82f6"
+                ctx.strokeStyle = groupFlashRef.current ? "#22c55e" : "#3b82f6"
                 ctx.lineWidth = 1.5 / scaleRef.current
                 ctx.setLineDash([6 / scaleRef.current, 4 / scaleRef.current])
 
@@ -151,12 +172,17 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 ctx.restore()
             }
         }
-        selectedIdsRef.current.forEach((id)=>{
-            const stroke = strokeRef.current.find(s=> s.id === id)
-            if(stroke){
+
+        // ✅ Single selection → normal individual selection box
+        else if (selectedIdsRef.current.length === 1) {
+            const stroke = strokeRef.current.find(
+                s => s.id === selectedIdsRef.current[0]
+            )
+
+            if (stroke) {
                 drawSelectionBox(ctx, stroke, scaleRef.current)
             }
-        })
+        }
         if(currentStrokeRef.current){
             drawStroke(ctx, currentStrokeRef.current, scaleRef.current)
         }
@@ -193,8 +219,75 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         ctx.setLineDash([])
     }
 
-    // handle mouse move hook
+    const getGroupedSelectionIds = (stroke) => {
+        if(!stroke) return []
+        
+        if(!stroke.groupId) return [stroke.id]
+        
+        return strokeRef.current
+        .filter(s=>s.groupId === stroke.groupId)
+        .map(s=>s.id)
+    }
+    
+    const groupSelectedStrokes = () => {
+        if(selectedIdsRef.current.length < 2 ) return 
+        
+        const newGroupId = crypto.randomUUID()
+        
+        socketRef.current.emit("stroke-move-start")
+        
+        strokeRef.current = strokeRef.current.map(stroke => {
+            if (selectedIdsRef.current.includes(stroke.id)) {
+                return {
+                    ...stroke,
+                    groupId: newGroupId
+                }
+            }
+            return stroke
+        })
+        const updatedStrokes = strokeRef.current.filter(stroke => 
+            selectedIdsRef.current.includes(stroke.id)
+        )
+        
+        socketRef.current.emit("strokes-move", updatedStrokes)
+        
+        drawGrid()
+        triggerGroupFlash()
+        redraw()
+    }
+    const ungroupSelectedStrokes = () => {
+        if (selectedIdsRef.current.length === 0) return 
 
+        const selectedStrokes = strokeRef.current.filter(stroke => 
+            selectedIdsRef.current.includes(stroke.id)
+        )
+        const hasAnyGroup = selectedStrokes.some(stroke => stroke.groupId)
+
+        if(!hasAnyGroup) return
+
+        socketRef.current.emit("stroke-move-start")
+
+        strokeRef.current = strokeRef.current.map(stroke => {
+            if (selectedIdsRef.current.includes(stroke.id)) {
+                return {
+                    ...stroke,
+                    groupId: null
+                }
+            }
+            return stroke
+        })
+
+        const updatedStrokes = strokeRef.current.filter(stroke => 
+            selectedIdsRef.current.includes(stroke.id)      
+        )
+
+        socketRef.current.emit("strokes-move", updatedStrokes)
+
+        drawGrid()
+        triggerGroupFlash()
+        redraw()
+    }
+    // handle mouse move hook
     const handleMouseMove = (e) => {
         // if (isEditingRef?.current) return
         if(isPanningRef.current){
@@ -239,7 +332,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             }
             return 
         }
-        if (!isDrawing) {
+        if (!isDrawing && tool === "select") {
             let hoveredHandle = null
             let hoveredStroke = null
 
@@ -519,94 +612,127 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 setIsDrawing(true)
                 return
             }
-            if (selectedIdsRef.current.length > 1) {
-                const selectedStrokes = strokeRef.current.filter(s =>
-                    selectedIdsRef.current.includes(s.id)
-                )
+        if (selectedIdsRef.current.length > 1) {
+            const selectedStrokes = strokeRef.current.filter(s =>
+                selectedIdsRef.current.includes(s.id)
+            )
 
-                const bounds = getGroupBounds(selectedStrokes)
+            const bounds = getGroupBounds(selectedStrokes)
 
-                const clickedStroke = getStrokeAtPoint(
-                    x, 
-                    y,
-                    strokeRef.current,
-                    scaleRef.current
-                )
-                const clickedOnAnyShape = !!clickedStroke
+            const clickedStroke = getStrokeAtPoint(
+                x,
+                y,
+                strokeRef.current,
+                scaleRef.current
+            )
 
-                if (isPointInGroupBounds(x, y, bounds, scaleRef.current) && !clickedOnAnyShape) {
-                    socketRef.current.emit("stroke-move-start")
+            const clickedSelectedStroke =
+                clickedStroke && selectedIdsRef.current.includes(clickedStroke.id)
 
-                    multiDragStartRef.current = {}
+            // const clickedUnselectedStroke =
+            //     clickedStroke && !selectedIdsRef.current.includes(clickedStroke.id)
 
-                    selectedIdsRef.current.forEach((id) => {
-                        const s = strokeRef.current.find(st => st.id === id)
-                        if (s) {
-                            multiDragStartRef.current[id] = structuredClone(s.points)
-                        }
-                    })
+            const clickedEmptyInsideGroupBox =
+                !clickedStroke &&
+                bounds &&
+                isPointInGroupBounds(x, y, bounds, scaleRef.current)
 
-                    lastMouseRef.current = { x, y }
-                    setIsDrawing(true)
-                    drawGrid()
-                    redraw()
-                    return
-                }
+            // ✅ allow drag if:
+            // - clicked selected item
+            // - OR clicked empty area inside outer group box
+            // ❌ do NOT drag if clicked unselected item
+            if (!isShiftPressed && (clickedSelectedStroke || clickedEmptyInsideGroupBox)) {
+                socketRef.current.emit("stroke-move-start")
+
+                multiDragStartRef.current = {}
+
+                selectedIdsRef.current.forEach((id) => {
+                    const s = strokeRef.current.find(st => st.id === id)
+                    if (s) {
+                        multiDragStartRef.current[id] = structuredClone(s.points)
+                    }
+                })
+
+                lastMouseRef.current = { x, y }
+                setIsDrawing(true)
+                drawGrid()
+                redraw()
+                return
             }
+
+            // if clicked unselected stroke, let fallback selection logic handle it
+        }
             
             // ✅ fallback: normal selection
             const stroke = getStrokeAtPoint(x, y, strokeRef.current, scaleRef.current)
 
             if (stroke) {
-                const alreadySelected = selectedIdsRef.current.includes(stroke.id)
-                
+                const groupIds = getGroupedSelectionIds(stroke)
+                const groupSet = new Set(groupIds)
+
                 if (isShiftPressed) {
-                    if (alreadySelected) {
+                    const allAlreadySelected = groupIds.every(id =>
+                        selectedIdsRef.current.includes(id)
+                    )
+
+                    if (allAlreadySelected) {
+                        // ✅ shift-click selected item/group → remove from selection
                         selectedIdsRef.current = selectedIdsRef.current.filter(
-                            id => id !== stroke.id
+                            id => !groupSet.has(id)
                         )
                     } else {
-                        selectedIdsRef.current = [...selectedIdsRef.current, stroke.id]
+                        // ✅ shift-click unselected item/group → add to selection
+                        const merged = new Set([...selectedIdsRef.current, ...groupIds])
+                        selectedIdsRef.current = [...merged]
                     }
                 } else {
-                    if(!alreadySelected) {
-                        selectedIdsRef.current = [stroke.id]
-                    }
+                    // normal click = replace selection
+                    selectedIdsRef.current = groupIds
                 }
-                
+                // sync single-selection ref
+                if (selectedIdsRef.current.length === 1) {
+                    selectedStrokeRef.current =
+                        strokeRef.current.find(s => s.id === selectedIdsRef.current[0]) || null
+                } else {
+                    selectedStrokeRef.current = null
+                }
+
+                // prepare drag state, but don't force weird selection behavior
                 multiDragStartRef.current = {}
-                
-                selectedIdsRef.current.forEach((id)=>{
-                    const s = strokeRef.current.find(st=> st.id === id)
-                    if(s){
+
+                selectedIdsRef.current.forEach((id) => {
+                    const s = strokeRef.current.find(st => st.id === id)
+                    if (s) {
                         multiDragStartRef.current[id] = structuredClone(s.points)
                     }
                 })
-                dragStartPointsRef.current = structuredClone(stroke.points)
-                
-                selectedStrokeRef.current = stroke
-                lastMouseRef.current = { x, y }
-                setIsDrawing(true)
-                if(!isShiftPressed){
+
+                // ✅ only allow drag on normal click, NOT shift-click
+                if (!isShiftPressed) {
+                    lastMouseRef.current = { x, y }
+                    setIsDrawing(true)
                     socketRef.current.emit("stroke-move-start")
+                } else {
+                    setIsDrawing(false)
                 }
+
                 drawGrid()
                 redraw()
             } else {
+                // ✅ click on empty canvas → clear selection + start marquee
                 if (!isShiftPressed) {
-
                     selectedIdsRef.current = []
                     selectedStrokeRef.current = null
 
-                    marqueeStartRef.current = {x,y}
-                    marqueeCurrentRef.current = {x,y}
+                    marqueeStartRef.current = { x, y }
+                    marqueeCurrentRef.current = { x, y }
                     isMarqueeSelectingRef.current = true
 
                     drawGrid()
                     redraw()
                 }
             }
-            
+
             return
         }
         if (tool === "text") {
@@ -617,6 +743,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                 color,
                 width: brushSize,
                 text: "",
+                groupId: null,
                 points: [{ x, y }]
             }
 
@@ -642,6 +769,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             tool,
             color,
             width: brushSize,
+            groupId: null,
             points: [{x,y}]
         }
         if(tool === "rect" || tool === "line" || tool === "circle" || tool === "arrow"){
@@ -672,11 +800,19 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                     maxY: Math.max(start.y, end.y),
                 }
 
-                const selected = strokeRef.current.filter(stroke => isStrokeInBounds(stroke, bounds)).map(stroke=> stroke.id)
-                selectedIdsRef.current = selected
+                const selected = strokeRef.current
+                    .filter(stroke => isStrokeInBounds(stroke, bounds))
 
-                if(selected.length === 1) {
-                    selectedStrokeRef.current = strokeRef.current.find(s=>s.id === selected[0]) || null
+                const expandedIds = new Set()
+
+                selected.forEach((stroke) => {
+                    getGroupedSelectionIds(stroke).forEach(id => expandedIds.add(id))
+                })
+
+                selectedIdsRef.current = [...expandedIds]
+
+                if (selected.length === 1) {
+                    selectedStrokeRef.current = selected[0]
                 }
                 else{
                     selectedStrokeRef.current = null
@@ -737,27 +873,39 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         const selectedStrokes = strokeRef.current.filter(stroke =>
             selectedIdsRef.current.includes(stroke.id)
         )
+        const oldToNewGroupMap = {}
 
-        const duplicated = selectedStrokes.map(stroke => ({
-            ...structuredClone(stroke),
-            id: crypto.randomUUID(),
-            points: stroke.points.map(p => ({
-                x: p.x + OFFSET,
-                y: p.y + OFFSET
-            }))
-        }))
+        const duplicated = selectedStrokes.map(stroke => {
+            let newGroupId = null
+
+            if (stroke.groupId) {
+                if (!oldToNewGroupMap[stroke.groupId]) {
+                    oldToNewGroupMap[stroke.groupId] = crypto.randomUUID()
+                }
+                newGroupId = oldToNewGroupMap[stroke.groupId]
+            }
+
+            return {
+                ...structuredClone(stroke),
+                id: crypto.randomUUID(),
+                groupId: newGroupId,
+                points: stroke.points.map(p => ({
+                    x: p.x + OFFSET,
+                    y: p.y + OFFSET
+                }))
+            }
+        })
 
         
         strokeRef.current.push(...duplicated)
-
-        
-        selectedIdsRef.current = duplicated.map(s => s.id)
-        selectedStrokeRef.current =
-            duplicated.length === 1 ? duplicated[0] : null
-
+        const expandedIds = new Set()
         duplicated.forEach(stroke => {
-            socketRef.current.emit("stroke-complete", stroke)
+            getGroupedSelectionIds(stroke).forEach(id => expandedIds.add(id))
         })
+        selectedIdsRef.current = [...expandedIds]
+        selectedStrokeRef.current = duplicated.length === 1 ? duplicated[0] : null
+        socketRef.current.emit("strokes-add-bulk", duplicated)
+
 
         drawGrid()
         redraw()
@@ -775,28 +923,42 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         if (!clipboardRef.current || clipboardRef.current.length === 0) return
 
         const OFFSET = 20
+        const oldToNewGroupMap = {}
 
-        const pasted = clipboardRef.current.map(stroke => ({
-            ...structuredClone(stroke),
-            id: crypto.randomUUID(),
-            points: stroke.points.map(p => ({
-                x: p.x + OFFSET,
-                y: p.y + OFFSET
-            }))
-        }))
+        const pasted = clipboardRef.current.map(stroke => {
+            let newGroupId = null
+
+            if (stroke.groupId) {
+                if (!oldToNewGroupMap[stroke.groupId]) {
+                    oldToNewGroupMap[stroke.groupId] = crypto.randomUUID()
+                }
+                newGroupId = oldToNewGroupMap[stroke.groupId]
+            }
+
+            return {
+                ...structuredClone(stroke),
+                id: crypto.randomUUID(),
+                groupId: newGroupId,
+                points: stroke.points.map(p => ({
+                    x: p.x + OFFSET,
+                    y: p.y + OFFSET
+                }))
+            }
+        })
 
         strokeRef.current.push(...pasted)
 
-        selectedIdsRef.current = pasted.map(s => s.id)
-        selectedStrokeRef.current =
-            pasted.length === 1 ? pasted[0] : null
+        const expandedIds = new Set()
+        pasted.forEach(stroke => {
+            getGroupedSelectionIds(stroke).forEach(id => expandedIds.add(id))
+        })
+        selectedIdsRef.current = [...expandedIds]
+        selectedStrokeRef.current = pasted.length === 1 ? pasted[0] : null
 
-        // update clipboard too, so repeated paste keeps stepping forward
         clipboardRef.current = structuredClone(pasted)
 
-        pasted.forEach(stroke => {
-            socketRef.current.emit("stroke-complete", stroke)
-        })
+        socketRef.current.emit("strokes-add-bulk", pasted)
+
 
         drawGrid()
         redraw()
@@ -864,18 +1026,29 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         const handleDuplicateSelected = () =>{
             duplicateSelectedStrokes()
         }
+        const handleGroupSelected = () => {
+            groupSelectedStrokes()
+        }
+        const handleUnGroupSelected = () => {
+            ungroupSelectedStrokes()
+        }
         window.addEventListener("duplicate-selected", handleDuplicateSelected)
         window.addEventListener("delete-selected", handleDeleteSelected)
         window.addEventListener("copy-selected", handleCopySelected)
         window.addEventListener("paste-selected", handlePasteSelected)
+        window.addEventListener("group-selected", handleGroupSelected)
+        window.addEventListener("ungroup-selected", handleUnGroupSelected)
         
         return () => {
             window.removeEventListener("delete-selected", handleDeleteSelected)
             window.removeEventListener("duplicate-selected", handleDuplicateSelected)
             window.removeEventListener("copy-selected", handleCopySelected)
             window.removeEventListener("paste-selected", handlePasteSelected)
+            window.removeEventListener("group-selected", handleGroupSelected)
+            window.removeEventListener("ungroup-selected", handleUnGroupSelected)
             
         }
+
     }, [])
     return {
         canvasRef,
@@ -889,6 +1062,8 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         offsetYRef,
         bringForward,
         sendBackward,
+        groupSelectedStrokes,
+        ungroupSelectedStrokes,
         handlers: {
             onMouseDown: handleMouseDown,
             onMouseMove: handleMouseMove,

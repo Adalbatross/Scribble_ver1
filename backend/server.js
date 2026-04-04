@@ -82,12 +82,10 @@ io.on("connection", (socket) => {
         }
         roomRedo[roomId] = []
         const newStroke = {
-            id: stroke.id,
+            ...stroke,
             userId,
-            tool: stroke.tool,
-            color: stroke.color,
-            width: stroke.width,
-            points: stroke.points
+            groupId: stroke.groupId ?? null
+
         }
         
         rooms[roomId].push(newStroke)
@@ -198,24 +196,53 @@ io.on("connection", (socket) => {
 
     io.to(roomId).emit("load-history", rooms[roomId])
     })
-    socket.on("strokes-move", async (updatedStrokes)=> {
+    socket.on("strokes-move", async (updatedStrokes) => {
         const roomId = socket.data.roomId
-        if(!roomId || !rooms[roomId]) return 
+        if (!roomId || !rooms[roomId]) return
 
-        updatedStrokes.forEach((updatedStrokes)=>{
-            const index = rooms[roomId].findIndex(s=> s.id === updatedStrokes.id)
-            if(index !== -1 ){
-                const existingUserId = rooms[roomId][index].userId
+        updatedStrokes.forEach((updatedStroke) => {
+            const index = rooms[roomId].findIndex(s => s.id === updatedStroke.id)
 
+            if (index !== -1) {
                 rooms[roomId][index] = {
-                    ...updatedStrokes,
-                    userId: existingUserId
+                    ...updatedStroke,   // ✅ trust full object
+                    userId: rooms[roomId][index].userId
                 }
             }
         })
 
         scheduleSave(roomId)
+
         socket.broadcast.to(roomId).emit("strokes-move", updatedStrokes)
+    })
+    socket.on("strokes-add-bulk", async (newStrokes) => {
+        const roomId = socket.data.roomId
+        const userId = socket.data.userId
+
+        if (!roomId) return
+        if (!rooms[roomId]) rooms[roomId] = []
+
+        // 🔥 FIX: always convert to array
+        const strokesArray = Array.isArray(newStrokes) ? newStrokes : [newStrokes]
+
+        // undo snapshot
+        roomUndo[roomId].push(structuredClone(rooms[roomId]))
+        if (roomUndo[roomId].length > MAX_UNDO) {
+            roomUndo[roomId].shift()
+        }
+        roomRedo[roomId] = []
+
+        const normalizedStrokes = strokesArray.map(stroke => ({
+            ...stroke,
+            userId,
+            groupId: stroke.groupId ?? null
+        }))
+
+        rooms[roomId].push(...normalizedStrokes)
+
+        scheduleSave(roomId)
+
+        socket.broadcast.to(roomId).emit("strokes-add-bulk", normalizedStrokes)
     })
 
     socket.on("disconnect", async () => {
