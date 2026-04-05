@@ -9,7 +9,7 @@ import {
     isStrokeInBounds
 } from "../utils/canvasUtils"
 
-export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGrid,spacePressRef, userIdRef, 
+export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGrid,spacePressRef, userIdRef,notifySelectionChange 
     // isEditingRef
 ) => {
 
@@ -254,6 +254,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         drawGrid()
         triggerGroupFlash()
         redraw()
+        notifySelectionChange()
     }
     const ungroupSelectedStrokes = () => {
         if (selectedIdsRef.current.length === 0) return 
@@ -286,6 +287,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         drawGrid()
         triggerGroupFlash()
         redraw()
+        notifySelectionChange()
     }
     // handle mouse move hook
     const handleMouseMove = (e) => {
@@ -718,6 +720,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
 
                 drawGrid()
                 redraw()
+                notifySelectionChange()
             } else {
                 // ✅ click on empty canvas → clear selection + start marquee
                 if (!isShiftPressed) {
@@ -730,6 +733,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
 
                     drawGrid()
                     redraw()
+                    notifySelectionChange?.()
                 }
             }
 
@@ -755,6 +759,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
 
             drawGrid()
             redraw()
+            notifySelectionChange?.()
 
             window.dispatchEvent(
                 new CustomEvent("open-text-editor", {
@@ -825,6 +830,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
 
                 drawGrid()
                 redraw()
+                notifySelectionChange?.()
                 return 
             }
             if(didMoveSelectionRef.current && selectedIdsRef.current.length > 0){
@@ -909,6 +915,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
 
         drawGrid()
         redraw()
+        notifySelectionChange?.()
     }
     const copySelectedStrokes = () => {
         if(selectedIdsRef.current.length === 0) return 
@@ -962,6 +969,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
 
         drawGrid()
         redraw()
+        notifySelectionChange?.()
     }
     const bringForward = () => {
         if (selectedIdsRef.current.length === 0) return
@@ -1000,6 +1008,30 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         drawGrid()
         redraw()
     }
+    const getSelectionGroupState = () => {
+        const selectedStrokes = strokeRef.current.filter(stroke =>
+            selectedIdsRef.current.includes(stroke.id)
+        )
+
+        const selectedGroupIds = selectedStrokes
+            .map(stroke => stroke.groupId)
+            .filter(Boolean)
+
+        const uniqueGroupIds = [...new Set(selectedGroupIds)]
+
+        const allGroupedTogether =
+            selectedStrokes.length > 1 &&
+            uniqueGroupIds.length === 1 &&
+            selectedStrokes.every(stroke => stroke.groupId === uniqueGroupIds[0])
+
+        const canGroup = selectedStrokes.length > 1 && !allGroupedTogether
+        const canUngroup = selectedStrokes.some(stroke => stroke.groupId)
+
+        return {
+            canGroup,
+            canUngroup
+        }
+    }
     useEffect(() => {
         const handleDeleteSelected = () => {
             if (selectedIdsRef.current.length === 0) return
@@ -1015,6 +1047,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
 
             drawGrid()
             redraw()
+            notifySelectionChange?.()
         }
         const handleCopySelected = () => {
             copySelectedStrokes()
@@ -1064,6 +1097,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         sendBackward,
         groupSelectedStrokes,
         ungroupSelectedStrokes,
+        getSelectionGroupState,
         handlers: {
             onMouseDown: handleMouseDown,
             onMouseMove: handleMouseMove,

@@ -23,7 +23,7 @@ const ToolButton = ({ active, onClick, children, title }) => (
     {children}
   </button>
 )
-const ToolOptionsPanel = ({ tool, color, setColor, brushSize, setBrushSize, onBringForward, onSendBackward, onGroup, onUngroup }) => {
+const ToolOptionsPanel = ({ tool, color, setColor, brushSize, setBrushSize, onBringForward, onSendBackward, onGroup, onUngroup, canGroup, canUngroup }) => {
 
   const showColor = ["pen", "rect", "line", "circle","arrow","text"].includes(tool)
   const showSize = ["pen", "line","rect", "circle", "arrow", "text"].includes(tool)
@@ -106,19 +106,25 @@ const ToolOptionsPanel = ({ tool, color, setColor, brushSize, setBrushSize, onBr
               </ToolButton>
             </div>
           </div>
-          <div className="border-t pt-3 flex flex-col gap-2">
-            <div className="text-xs text-gray-700 font-medium">Group</div>
+          {(canGroup || canUngroup) && (
+            <div className="border-t pt-3 flex flex-col gap-2">
+              <div className="text-xs text-gray-700 font-medium">Group</div>
 
-            <div className="flex gap-2">
-              <ToolButton onClick={onGroup} title="Group (Ctrl+G)">
-                G
-              </ToolButton>
+              <div className="flex gap-2">
+                {canGroup && (
+                  <ToolButton onClick={onGroup} title="Group (Ctrl+G)">
+                    G
+                  </ToolButton>
+                )}
 
-              <ToolButton onClick={onUngroup} title="Ungroup (Ctrl+Shift+G)">
-                U
-              </ToolButton>
+                {canUngroup && (
+                  <ToolButton onClick={onUngroup} title="Ungroup (Ctrl+Shift+G)">
+                    U
+                  </ToolButton>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
     </div>

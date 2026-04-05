@@ -25,6 +25,7 @@ const Board = () => {
     const isEditingRef = useRef(false)
     const [copied, setCopied] = useState(false)
     const [users, setUsers] = useState([])
+    const [, setSelectionVersion] = useState(0)
     if(! userIdRef.current){
         const existing = localStorage.getItem("scribble-user-id")
         if(existing){
@@ -106,10 +107,18 @@ const Board = () => {
         ctx.restore() 
         
     }
-    const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef, offsetYRef, handlers,bringForward, sendBackward, groupSelectedStrokes, ungroupSelectedStrokes, 
+    const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef,getSelectionGroupState, offsetYRef, handlers,bringForward, sendBackward, groupSelectedStrokes, ungroupSelectedStrokes, 
 
-    } = useCanvasInteractions(tool, color, brushSize, socketRef, drawGrid, spacePressRef, userIdRef,)
-
+    } = useCanvasInteractions(tool,
+        color,
+        brushSize,
+        socketRef,
+        drawGrid,
+        spacePressRef,
+        userIdRef,
+        ()=> setSelectionVersion(v=>v+1)
+    )
+    const {canGroup, canUngroup} = getSelectionGroupState()
     useEffect(() => {
         const canvas = canvasRef.current
         if (!canvas) return 
@@ -179,6 +188,7 @@ const Board = () => {
 
             drawGrid()
             redraw()
+            setSelectionVersion(v=>v+1)
         })
         socketRef.current.on("strokes-reordered", (updatedStroke)=>{
             strokeRef.current = updatedStroke
@@ -193,6 +203,7 @@ const Board = () => {
 
             drawGrid()
             redraw()
+            setSelectionVersion(v=>v+1)
         })
         socketRef.current.on("load-history", (strokes)=>{
             strokeRef.current = strokes
@@ -439,6 +450,8 @@ const Board = () => {
             onSendBackward={sendBackward}
             onGroup={groupSelectedStrokes}
             onUngroup={ungroupSelectedStrokes}
+            canGroup = {canGroup}
+            canUngroup = {canUngroup}
         />
         </div>
 
