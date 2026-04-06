@@ -1,4 +1,4 @@
-import { getRectBounds, getRectCenter, getRectRotateHandle } from "./rectUtils"
+import { distanceToSegment, getRectBounds, getRectCenter, getRectRotateHandle, getRotatedRectCorners } from "./rectUtils"
 
 
 export const drawStroke = (ctx, stroke) =>{
@@ -139,37 +139,44 @@ export const drawSelectionBox = (ctx, stroke,scale) =>{
 
     //  RECT
     if (stroke.tool === "rect") {
-        const bounds = getRectBounds(stroke)
         const center = getRectCenter(stroke)
         const rotateHandle = getRectRotateHandle(stroke, scale)
-        if(!bounds || !center || !rotateHandle) return 
+        const corners = getRotatedRectCorners(stroke)
 
-        const { minX, maxX, minY, maxY } = bounds
+        if (!center || !rotateHandle || !corners) return
 
-        ctx.strokeRect(minX , minY, maxX - minX, maxY - minY)
+        ctx.strokeStyle = "#0077FF"
+        ctx.lineWidth = 1 / scale
 
-        const corners = [
-            [minX, minY],
-            [maxX, minY],
-            [minX, maxY],
-            [maxX, maxY],
-        ]
+        // rotated outline
+        ctx.beginPath()
+        ctx.moveTo(corners[0].x, corners[0].y)
+        for (let i = 1; i < corners.length; i++) {
+            ctx.lineTo(corners[i].x, corners[i].y)
+        }
+        ctx.closePath()
+        ctx.stroke()
 
-        corners.forEach(([x,y])=>{
+        // corner handles
+        corners.forEach(({ x, y }) => {
             ctx.beginPath()
-            ctx.arc(x, y , handleSize , 0 , Math.PI * 2)
+            ctx.arc(x, y, handleSize, 0, Math.PI * 2)
             ctx.fillStyle = "#0077FF"
             ctx.fill()
         })
-// this is for the connector line to the handle
+
+        // connector line from top edge midpoint to rotate handle
+        const topMidX = (corners[0].x + corners[1].x) / 2
+        const topMidY = (corners[0].y + corners[1].y) / 2
+
         ctx.beginPath()
-        ctx.moveTo(center.x, minY)
+        ctx.moveTo(topMidX, topMidY)
         ctx.lineTo(rotateHandle.x, rotateHandle.y)
         ctx.strokeStyle = "#0077FF"
         ctx.lineWidth = 1 / scale
         ctx.stroke()
 
-        // rotate handle circle
+        // rotate handle
         ctx.beginPath()
         ctx.arc(rotateHandle.x, rotateHandle.y, handleSize, 0, Math.PI * 2)
         ctx.fillStyle = "#0077FF"
@@ -269,19 +276,23 @@ export const getStrokeAtPoint = (x,y, strokes, scale) =>{
     for (let i  = strokes.length -1; i>=0; i--){
         const stroke = strokes[i]
         if (stroke.tool === "rect" && stroke.points.length >= 2) {
-            const bounds = getRectBounds(stroke)
-            if (!bounds) continue
+            const corners = getRotatedRectCorners(stroke)
+            if (!corners) continue
 
-            const { minX, maxX, minY, maxY } = bounds
             const threshold = 10 / scale
 
-            const nearLeft   = Math.abs(x - minX) <= threshold && y >= minY && y <= maxY
-            const nearRight  = Math.abs(x - maxX) <= threshold && y >= minY && y <= maxY
-            const nearTop    = Math.abs(y - minY) <= threshold && x >= minX && x <= maxX
-            const nearBottom = Math.abs(y - maxY) <= threshold && x >= minX && x <= maxX
+            const edges = [
+                [corners[0], corners[1]], // top of the rectangle
+                [corners[1], corners[2]], // right
+                [corners[2], corners[3]], // bottom
+                [corners[3], corners[0]], // left
+            ]
 
-            if (nearLeft || nearRight || nearTop || nearBottom) {
-                return stroke
+            for (const [a, b] of edges) {
+                const dist = distanceToSegment(x, y, a.x, a.y, b.x, b.y)
+                if (dist <= threshold) {
+                    return stroke
+                }
             }
         }
         if (stroke.tool === "pen" && stroke.points.length > 1) {
@@ -386,23 +397,14 @@ export const getHandleAtPoint = (x, y, stroke,scale) => {
     const radius = 10 / scale
 
     if (stroke.tool === "rect") {
-        const bounds = getRectBounds(stroke)
-        if(!bounds) return null
-
-        const {minX, minY, maxX, maxY} = bounds 
-        if (stroke.tool === "rect") {
-            const rotateHandle = getRectRotateHandle(stroke, scale)
-            if(rotateHandle) {
-                const dist = Math.hypot(x - rotateHandle.x, y - rotateHandle.y)
-                if (dist <= radius) return "rotate"
-            }
+        const rotateHandle = getRectRotateHandle(stroke, scale)
+        if (rotateHandle) {
+            const dist = Math.hypot(x - rotateHandle.x, y - rotateHandle.y)
+            if (dist <= radius) return "rotate"
         }
-        const corners = [
-            { key: "tl", x: minX, y: minY },
-            { key: "tr", x: maxX, y: minY },
-            { key: "bl", x: minX, y: maxY },
-            { key: "br", x: maxX, y: maxY },
-        ]
+
+        const corners = getRotatedRectCorners(stroke)
+        if (!corners) return null
 
         for (const c of corners) {
             if (Math.hypot(x - c.x, y - c.y) <= radius) return c.key
