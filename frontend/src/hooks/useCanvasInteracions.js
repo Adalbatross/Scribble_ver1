@@ -8,6 +8,7 @@ import {
     isPointInGroupBounds,
     isStrokeInBounds
 } from "../utils/canvasUtils"
+import { getRectCenter } from "../utils/rectUtils"
 
 export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGrid,spacePressRef, userIdRef,notifySelectionChange 
     // isEditingRef
@@ -39,6 +40,10 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
     const didMoveSelectionRef= useRef(false)
     const clipboardRef = useRef([])
     const groupFlashRef = useRef(false)
+    const isRotatingRef = useRef(false)
+    const rotateStartAngleRef = useRef(0)
+    const intitialRotationRef = useRef(0) 
+
     // const undoStackRef = useRef([])
     // const redoStackRef = useRef([])
     // const cloneStrokes = () => {
@@ -90,7 +95,10 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             canvas.style.cursor = "pointer"
         } else if (handle === "center") {
             canvas.style.cursor = "move"
-        } else {
+        }else if (handle === "rotate") {
+            canvas.style.cursor = "grab"
+        }
+        else {
             canvas.style.cursor = "crosshair"
     }
 }
@@ -341,6 +349,10 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             // 1️⃣ Check handles first (highest priority)
             for (let i = strokeRef.current.length - 1; i >= 0; i--) {
                 const s = strokeRef.current[i]
+
+                // ✅ only selected strokes should expose handles
+                if (!selectedIdsRef.current.includes(s.id)) continue
+
                 const handle = getHandleAtPoint(x, y, s, scaleRef.current)
 
                 if (handle) {
@@ -396,6 +408,25 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             drawGrid()
             redraw()
             return 
+        }
+        if (isRotatingRef.current && selectedStrokeRef.current?.tool === "rect") {
+            if(!isDrawing) {
+                isRotatingRef.current = false
+                return 
+            }
+            const stroke = selectedStrokeRef.current
+            const center = getRectCenter(stroke)
+
+            if (!center) return
+
+            const currentAngle = Math.atan2(y - center.y, x - center.x)
+            const delta = currentAngle - rotateStartAngleRef.current
+
+            stroke.rotation = intitialRotationRef.current + delta
+
+            drawGrid()
+            redraw()
+            return
         }
         if (tool === "select" && selectedStrokeRef.current && isDrawing && activeHandleRef.current) {
             
@@ -578,6 +609,24 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         
         // PRIORITY: handle click (from hover)
         if (tool === "select") {
+            if (
+                hoveredHandleRef.current === "rotate" &&
+                hoveredStrokeRef.current?.tool === "rect"
+            ) {
+                const stroke = hoveredStrokeRef.current
+                const center = getRectCenter(stroke)
+                
+                if (!center) return
+
+                rotateStartAngleRef.current = Math.atan2(y - center.y, x - center.x)
+                intitialRotationRef.current = stroke.rotation || 0
+
+                isRotatingRef.current = true
+                selectedStrokeRef.current = stroke
+
+                setIsDrawing(true)
+                return
+            }
             //  GROUP BOX MOVE
             if (hoveredHandleRef.current && hoveredStrokeRef.current) {
                 socketRef.current.emit("stroke-move-start")
@@ -775,6 +824,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             color,
             width: brushSize,
             groupId: null,
+            rotation: tool === "rect" ? 0 : undefined,
             points: [{x,y}]
         }
         if(tool === "rect" || tool === "line" || tool === "circle" || tool === "arrow"){
@@ -794,6 +844,22 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             return 
         }
         if(tool === "select"){
+            if (isRotatingRef.current) {
+                isRotatingRef.current = false
+                activeHandleRef.current = null
+                hoveredHandleRef.current = null
+                hoveredStrokeRef.current = null
+                textResizeStartRef.current = null
+                setIsDrawing(false)
+    
+                if (selectedStrokeRef.current) {
+                    socketRef.current.emit("stroke-move", selectedStrokeRef.current)
+                }
+    
+                drawGrid()
+                redraw()
+                return
+            }
             if(isMarqueeSelectingRef.current){
                 const start = marqueeStartRef.current
                 const end = marqueeCurrentRef.current

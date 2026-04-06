@@ -1,3 +1,6 @@
+import { getRectBounds, getRectCenter, getRectRotateHandle } from "./rectUtils"
+
+
 export const drawStroke = (ctx, stroke) =>{
         if (!stroke.points.length) return
         ctx.lineWidth = stroke.width
@@ -23,15 +26,25 @@ export const drawStroke = (ctx, stroke) =>{
         }
         if (stroke.tool === "rect"){
             if(stroke.points.length < 2) return 
-            const p1 = stroke.points[0]
-            const p2 = stroke.points[1]
-            
-            const width = p2.x -p1.x
-            const height = p2.y -p1.y
+            const bounds = getRectBounds(stroke)
+            const center = getRectCenter(stroke)
+
+            if(!bounds || !center) return 
+
+            const {minX, maxX, minY, maxY} = bounds
+            const width =  maxX- minX
+            const height = maxY - minY
+            const rotation = stroke.rotation || 0
+
+            ctx.save()
+            ctx.translate(center.x, center.y)
+            ctx.rotate(rotation)
 
             ctx.beginPath()
-            ctx.rect(p1.x, p1.y, width, height)
+            ctx.rect(-width / 2, -height / 2, width, height)
             ctx.stroke()
+
+            ctx.restore()
         }
         if((stroke.tool === "line" || stroke.tool === "arrow" ) && stroke.points.length >= 2){
             const p1 = stroke.points[0]
@@ -126,13 +139,12 @@ export const drawSelectionBox = (ctx, stroke,scale) =>{
 
     //  RECT
     if (stroke.tool === "rect") {
-        const p1 = stroke.points[0]
-        const p2 = stroke.points[1]
+        const bounds = getRectBounds(stroke)
+        const center = getRectCenter(stroke)
+        const rotateHandle = getRectRotateHandle(stroke, scale)
+        if(!bounds || !center || !rotateHandle) return 
 
-        const minX = Math.min(p1.x, p2.x)
-        const maxX = Math.max(p1.x, p2.x)
-        const minY = Math.min(p1.y, p2.y)
-        const maxY = Math.max(p1.y, p2.y)
+        const { minX, maxX, minY, maxY } = bounds
 
         ctx.strokeRect(minX , minY, maxX - minX, maxY - minY)
 
@@ -149,6 +161,19 @@ export const drawSelectionBox = (ctx, stroke,scale) =>{
             ctx.fillStyle = "#0077FF"
             ctx.fill()
         })
+// this is for the connector line to the handle
+        ctx.beginPath()
+        ctx.moveTo(center.x, minY)
+        ctx.lineTo(rotateHandle.x, rotateHandle.y)
+        ctx.strokeStyle = "#0077FF"
+        ctx.lineWidth = 1 / scale
+        ctx.stroke()
+
+        // rotate handle circle
+        ctx.beginPath()
+        ctx.arc(rotateHandle.x, rotateHandle.y, handleSize, 0, Math.PI * 2)
+        ctx.fillStyle = "#0077FF"
+        ctx.fill()
     }
 
     //  LINE
@@ -243,20 +268,11 @@ const getTextBounds = (stroke) => {
 export const getStrokeAtPoint = (x,y, strokes, scale) =>{
     for (let i  = strokes.length -1; i>=0; i--){
         const stroke = strokes[i]
-        if(stroke.tool === "rect" && stroke.points.length >=2){
-            const p1 = stroke.points[0]
-            const p2 = stroke.points[1]
+        if (stroke.tool === "rect" && stroke.points.length >= 2) {
+            const bounds = getRectBounds(stroke)
+            if (!bounds) continue
 
-            const minX = Math.min(p1.x, p2.x)
-            const maxX = Math.max(p1.x, p2.x)
-            
-            const minY = Math.min(p1.y, p2.y)
-            const maxY = Math.max(p1.y, p2.y)
-
-            // if(x>= minX && x<=maxX && y>=minY && y<= maxY){
-            //     return stroke
-            // } this is the old edge detection algo which helps in the delection inside the shape 
-
+            const { minX, maxX, minY, maxY } = bounds
             const threshold = 10 / scale
 
             const nearLeft   = Math.abs(x - minX) <= threshold && y >= minY && y <= maxY
@@ -267,7 +283,6 @@ export const getStrokeAtPoint = (x,y, strokes, scale) =>{
             if (nearLeft || nearRight || nearTop || nearBottom) {
                 return stroke
             }
-
         }
         if (stroke.tool === "pen" && stroke.points.length > 1) {
             for (let i = 0; i < stroke.points.length - 1; i++) {
@@ -371,14 +386,17 @@ export const getHandleAtPoint = (x, y, stroke,scale) => {
     const radius = 10 / scale
 
     if (stroke.tool === "rect") {
-        const p1 = stroke.points[0]
-        const p2 = stroke.points[1]
+        const bounds = getRectBounds(stroke)
+        if(!bounds) return null
 
-        const minX = Math.min(p1.x, p2.x)
-        const maxX = Math.max(p1.x, p2.x)
-        const minY = Math.min(p1.y, p2.y)
-        const maxY = Math.max(p1.y, p2.y)
-
+        const {minX, minY, maxX, maxY} = bounds 
+        if (stroke.tool === "rect") {
+            const rotateHandle = getRectRotateHandle(stroke, scale)
+            if(rotateHandle) {
+                const dist = Math.hypot(x - rotateHandle.x, y - rotateHandle.y)
+                if (dist <= radius) return "rotate"
+            }
+        }
         const corners = [
             { key: "tl", x: minX, y: minY },
             { key: "tr", x: maxX, y: minY },
@@ -475,13 +493,10 @@ export const isStrokeInBounds = (stroke, bounds) => {
 
     let minX, maxX, minY, maxY
     if (stroke.tool === "rect") {
-        const p1 = stroke.points[0]
-        const p2 = stroke.points[1]
+        const rectBounds = getRectBounds(stroke)
+        if (!rectBounds) return false
 
-        const rMinX = Math.min(p1.x, p2.x)
-        const rMaxX = Math.max(p1.x, p2.x)
-        const rMinY = Math.min(p1.y, p2.y)
-        const rMaxY = Math.max(p1.y, p2.y)
+        const { minX: rMinX, maxX: rMaxX, minY: rMinY, maxY: rMaxY } = rectBounds
 
         const marqueeOverlapsX = bounds.maxX >= rMinX && bounds.minX <= rMaxX
         const marqueeOverlapsY = bounds.maxY >= rMinY && bounds.minY <= rMaxY

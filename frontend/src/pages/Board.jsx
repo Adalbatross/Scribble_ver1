@@ -288,9 +288,8 @@ const Board = () => {
                 sendBackward()
             }
 
-            const isGroup = (e.ctrlKey || e.metaKey && e.key.toLowerCase() === "g")
-            const isUnGroup = (e.ctrlKey || e.metaKey && e.shiftKey && e.key.toLowerCase() === "g")
-
+            const isGroup = (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "g"
+            const isUnGroup = (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "g"
             if(isGroup){
                 e.preventDefault()
                 window.dispatchEvent(new CustomEvent("group-selected"))
