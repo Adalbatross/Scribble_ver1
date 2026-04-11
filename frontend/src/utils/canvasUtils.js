@@ -1,4 +1,4 @@
-import { distanceToSegment, getRectBounds, getRectCenter, getRectRotateHandle, getRotatedRectCorners } from "./rectUtils"
+import { distanceToSegment, getRectBounds, getRotatedRectCorners } from "./rectUtils"
 
 
 export const drawStroke = (ctx, stroke) =>{
@@ -24,20 +24,13 @@ export const drawStroke = (ctx, stroke) =>{
             
             ctx.stroke()
         }
-        if (stroke.tool === "rect"){
-            if(stroke.points.length < 2) return 
-            const bounds = getRectBounds(stroke)
-            const center = getRectCenter(stroke)
-
-            if(!bounds || !center) return 
-
-            const {minX, maxX, minY, maxY} = bounds
-            const width =  maxX- minX
-            const height = maxY - minY
+        if (stroke.tool === "rect" && stroke.center && stroke.rectSize) {
+            const { x, y } = stroke.center
+            const { width, height } = stroke.rectSize
             const rotation = stroke.rotation || 0
 
             ctx.save()
-            ctx.translate(center.x, center.y)
+            ctx.translate(x, y)
             ctx.rotate(rotation)
 
             ctx.beginPath()
@@ -138,49 +131,56 @@ export const drawSelectionBox = (ctx, stroke,scale) =>{
     }
 
     //  RECT
-    if (stroke.tool === "rect") {
-        const center = getRectCenter(stroke)
-        const rotateHandle = getRectRotateHandle(stroke, scale)
-        const corners = getRotatedRectCorners(stroke)
+    if (stroke.tool === "rect" && stroke.center && stroke.rectSize) {
+        const { x, y } = stroke.center
+        const { width, height } = stroke.rectSize
+        const rotation = stroke.rotation || 0
 
-        if (!center || !rotateHandle || !corners) return
+        ctx.save()
+        ctx.translate(x, y)
+        ctx.rotate(rotation)
 
         ctx.strokeStyle = "#0077FF"
         ctx.lineWidth = 1 / scale
 
-        // rotated outline
+        // selection outline
         ctx.beginPath()
-        ctx.moveTo(corners[0].x, corners[0].y)
-        for (let i = 1; i < corners.length; i++) {
-            ctx.lineTo(corners[i].x, corners[i].y)
-        }
-        ctx.closePath()
+        ctx.rect(-width / 2, -height / 2, width, height)
         ctx.stroke()
 
-        // corner handles
-        corners.forEach(({ x, y }) => {
+        const handleSizeLocal = 6 
+
+        const corners = [
+            { key: "tl", x: -width / 2, y: -height / 2 },
+            { key: "tr", x:  width / 2, y: -height / 2 },
+            { key: "br", x:  width / 2, y:  height / 2 },
+            { key: "bl", x: -width / 2, y:  height / 2 },
+        ]
+
+        // draw handles
+        corners.forEach(c => {
             ctx.beginPath()
-            ctx.arc(x, y, handleSize, 0, Math.PI * 2)
+            ctx.arc(c.x, c.y, handleSizeLocal, 0, Math.PI * 2)
             ctx.fillStyle = "#0077FF"
             ctx.fill()
         })
 
-        // connector line from top edge midpoint to rotate handle
-        const topMidX = (corners[0].x + corners[1].x) / 2
-        const topMidY = (corners[0].y + corners[1].y) / 2
+        // rotate handle (top middle)
+        const offset = 30 
+        const rx = 0
+        const ry = -height / 2 - offset
 
         ctx.beginPath()
-        ctx.moveTo(topMidX, topMidY)
-        ctx.lineTo(rotateHandle.x, rotateHandle.y)
-        ctx.strokeStyle = "#0077FF"
-        ctx.lineWidth = 1 / scale
+        ctx.moveTo(0, -height / 2)
+        ctx.lineTo(rx, ry)
         ctx.stroke()
 
-        // rotate handle
         ctx.beginPath()
-        ctx.arc(rotateHandle.x, rotateHandle.y, handleSize, 0, Math.PI * 2)
+        ctx.arc(rx, ry, handleSizeLocal, 0, Math.PI * 2)
         ctx.fillStyle = "#0077FF"
         ctx.fill()
+
+        ctx.restore()
     }
 
     //  LINE
@@ -396,18 +396,41 @@ export const getHandleAtPoint = (x, y, stroke,scale) => {
 
     const radius = 10 / scale
 
-    if (stroke.tool === "rect") {
-        const rotateHandle = getRectRotateHandle(stroke, scale)
-        if (rotateHandle) {
-            const dist = Math.hypot(x - rotateHandle.x, y - rotateHandle.y)
-            if (dist <= radius) return "rotate"
+    if (stroke.tool === "rect" && stroke.center && stroke.rectSize) {
+        const { x: cx, y: cy } = stroke.center
+        const { width, height } = stroke.rectSize
+        const rotation = stroke.rotation || 0
+
+        const radius = 10 / scale
+
+        // 🔥 convert mouse → local rect space
+        const dx = x - cx
+        const dy = y - cy
+
+        const localX = dx * Math.cos(-rotation) - dy * Math.sin(-rotation)
+        const localY = dx * Math.sin(-rotation) + dy * Math.cos(-rotation)
+
+        // corner handles (local space)
+        const handles = [
+            { key: "tl", x: -width / 2, y: -height / 2 },
+            { key: "tr", x:  width / 2, y: -height / 2 },
+            { key: "br", x:  width / 2, y:  height / 2 },
+            { key: "bl", x: -width / 2, y:  height / 2 },
+        ]
+
+        for (const h of handles) {
+            if (Math.hypot(localX - h.x, localY - h.y) <= radius) {
+                return h.key
+            }
         }
 
-        const corners = getRotatedRectCorners(stroke)
-        if (!corners) return null
+        // rotate handle (top center)
+        const offset = 30
+        const rx = 0
+        const ry = -height / 2 - offset
 
-        for (const c of corners) {
-            if (Math.hypot(x - c.x, y - c.y) <= radius) return c.key
+        if (Math.hypot(localX - rx, localY - ry) <= radius) {
+            return "rotate"
         }
     }
 
@@ -465,13 +488,30 @@ export const getGroupBounds = (strokes) => {
             maxX = Math.max(maxX, bounds.x + bounds.width)
             maxY = Math.max(maxY, bounds.y + bounds.height)
         } else {
-            const xs = stroke.points.map(p => p.x)
-            const ys = stroke.points.map(p => p.y)
+            
+            if (stroke.tool === "rect" && stroke.center && stroke.rectSize) {
+                const { x, y } = stroke.center
+                const { width, height } = stroke.rectSize
 
-            minX = Math.min(minX, ...xs)
-            minY = Math.min(minY, ...ys)
-            maxX = Math.max(maxX, ...xs)
-            maxY = Math.max(maxY, ...ys)
+                const rMinX = x - width / 2
+                const rMaxX = x + width / 2
+                const rMinY = y - height / 2
+                const rMaxY = y + height / 2
+
+                minX = Math.min(minX, rMinX)
+                minY = Math.min(minY, rMinY)
+                maxX = Math.max(maxX, rMaxX)
+                maxY = Math.max(maxY, rMaxY)
+            }
+            else {
+                const xs = stroke.points.map(p => p.x)
+                const ys = stroke.points.map(p => p.y)
+
+                minX = Math.min(minX, ...xs)
+                minY = Math.min(minY, ...ys)
+                maxX = Math.max(maxX, ...xs)
+                maxY = Math.max(maxY, ...ys)
+            }
         }
     })
 
@@ -500,15 +540,13 @@ export const isStrokeInBounds = (stroke, bounds) => {
 
         const { minX: rMinX, maxX: rMaxX, minY: rMinY, maxY: rMaxY } = rectBounds
 
-        const marqueeOverlapsX = bounds.maxX >= rMinX && bounds.minX <= rMaxX
-        const marqueeOverlapsY = bounds.maxY >= rMinY && bounds.minY <= rMaxY
+        const overlaps =
+            bounds.maxX >= rMinX &&
+            bounds.minX <= rMaxX &&
+            bounds.maxY >= rMinY &&
+            bounds.minY <= rMaxY
 
-        const touchesLeft   = bounds.minX <= rMinX && bounds.maxX >= rMinX && marqueeOverlapsY
-        const touchesRight  = bounds.minX <= rMaxX && bounds.maxX >= rMaxX && marqueeOverlapsY
-        const touchesTop    = bounds.minY <= rMinY && bounds.maxY >= rMinY && marqueeOverlapsX
-        const touchesBottom = bounds.minY <= rMaxY && bounds.maxY >= rMaxY && marqueeOverlapsX
-
-        return touchesLeft || touchesRight || touchesTop || touchesBottom
+        return overlaps
     }
     // if (stroke.tool === "circle") {
     //     const p1 = stroke.points[0] // center

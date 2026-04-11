@@ -1,16 +1,14 @@
 export const getRectBounds = (stroke) => {
-    if (!stroke || stroke.tool !== "rect" || stroke.points.length < 2) {
-        return null
-    }
+    if (!stroke.center || !stroke.rectSize) return null
 
-    const p1 = stroke.points[0]
-    const p2 = stroke.points[1]
+    const { x, y } = stroke.center
+    const { width, height } = stroke.rectSize
 
     return {
-        minX: Math.min(p1.x, p2.x),
-        maxX: Math.max(p1.x, p2.x),
-        minY: Math.min(p1.y, p2.y),
-        maxY: Math.max(p1.y, p2.y),
+        minX: x - width / 2,
+        maxX: x + width / 2,
+        minY: y - height / 2,
+        maxY: y + height / 2,
     }
 }
 

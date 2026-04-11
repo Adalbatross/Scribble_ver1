@@ -8,7 +8,7 @@ import {
     isPointInGroupBounds,
     isStrokeInBounds
 } from "../utils/canvasUtils"
-import { getRectCenter, inverseRotatePoint, rotatePoint } from "../utils/rectUtils"
+import { getRectCenter, inverseRotatePoint} from "../utils/rectUtils"
 
 export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGrid,spacePressRef, userIdRef,notifySelectionChange 
     // isEditingRef
@@ -433,51 +433,58 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             
             didMoveSelectionRef.current = true
             const stroke = selectedStrokeRef.current
-            const { corner, anchor } = activeHandleRef.current
+            const { corner } = activeHandleRef.current
             
             // 🟦 RECT (keep your existing logic)
-            if (stroke.tool === "rect") {
-                const p1 = stroke.points[0]
-                const p2 = stroke.points[1]
-
+            if (stroke.tool === "rect" && stroke.center && stroke.rectSize) {
                 const session = rectResizeSesssionRef.current
                 if (!session) return
 
-                const { center, rotation, anchorLocal } = session
+                const { x: cx, y: cy } = session.center
+                const rotation = session.rotation || 0
+                const { initialWidth: width, initialHeight: height } = session
 
-                // mouse in frozen local rect space
-                const localMouse = inverseRotatePoint(x, y, center.x, center.y, rotation)
+                // mouse → local rect space (relative to frozen session center)
+                const dx = x - cx
+                const dy = y - cy
+                const localX = dx * Math.cos(-rotation) - dy * Math.sin(-rotation)
+                const localY = dx * Math.sin(-rotation) + dy * Math.cos(-rotation)
 
-                const newMinX = Math.min(anchorLocal.x, localMouse.x)
-                const newMaxX = Math.max(anchorLocal.x, localMouse.x)
-                const newMinY = Math.min(anchorLocal.y, localMouse.y)
-                const newMaxY = Math.max(anchorLocal.y, localMouse.y)
+                // half extents of the original rect in local space
+                const hw = width / 2
+                const hh = height / 2
 
-                // new local corners
-                const localP1 = { x: newMinX, y: newMinY }
-                const localP2 = { x: newMaxX, y: newMaxY }
+                // anchor is the corner OPPOSITE to the one being dragged (fixed point)
+                let anchorLocalX, anchorLocalY
 
-                // new local center
-                const localCenter = {
-                    x: (newMinX + newMaxX) / 2,
-                    y: (newMinY + newMaxY) / 2,
-                }
+                if (corner === "tl") { anchorLocalX =  hw; anchorLocalY =  hh }
+                if (corner === "tr") { anchorLocalX = -hw; anchorLocalY =  hh }
+                if (corner === "br") { anchorLocalX = -hw; anchorLocalY = -hh }
+                if (corner === "bl") { anchorLocalX =  hw; anchorLocalY = -hh }
 
-                // world center for resized rect
-                const worldCenter = rotatePoint(localCenter.x, localCenter.y, center.x, center.y, rotation)
+                // new size = distance from anchor to mouse, in local space
+                let newHalfW = Math.abs(localX - anchorLocalX) / 2
+                let newHalfH = Math.abs(localY - anchorLocalY) / 2
 
-                // convert local corners around NEW center
-                const worldP1 = rotatePoint(localP1.x, localP1.y, localCenter.x, localCenter.y, rotation)
-                const worldP2 = rotatePoint(localP2.x, localP2.y, localCenter.x, localCenter.y, rotation)
+                newHalfW = Math.max(5, newHalfW)
+                newHalfH = Math.max(5, newHalfH)
 
-                // shift from local center space into actual world center
-                const dx = worldCenter.x - localCenter.x
-                const dy = worldCenter.y - localCenter.y
+                // new center in local space = midpoint between anchor and mouse
+                const newCenterLocalX = (anchorLocalX + localX) / 2
+                const newCenterLocalY = (anchorLocalY + localY) / 2
 
-                p1.x = worldP1.x + dx
-                p1.y = worldP1.y + dy
-                p2.x = worldP2.x + dx
-                p2.y = worldP2.y + dy
+                // rotate new local center back to world space
+                const worldCenterX = cx + newCenterLocalX * Math.cos(rotation) - newCenterLocalY * Math.sin(rotation)
+                const worldCenterY = cy + newCenterLocalX * Math.sin(rotation) + newCenterLocalY * Math.cos(rotation)
+
+                stroke.center.x = worldCenterX
+                stroke.center.y = worldCenterY
+                stroke.rectSize.width  = newHalfW * 2
+                stroke.rectSize.height = newHalfH * 2
+
+                // keep points in sync
+                stroke.points[0] = { x: worldCenterX - newHalfW, y: worldCenterY - newHalfH }
+                stroke.points[1] = { x: worldCenterX + newHalfW, y: worldCenterY + newHalfH }
             }
 
             // 🟩 LINE RESIZE
@@ -552,15 +559,27 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             // }))
             selectedIdsRef.current.forEach((id)=>{
                 const stroke = strokeRef.current.find(s=> s.id === id)
-                const originalPoints = multiDragStartRef.current[id]
 
-                if(stroke && originalPoints){
-                    stroke.points = originalPoints.map(p => ({
-                        x: p.x + dx, 
+                if (!stroke) return
+
+                if (stroke.tool === "rect" && stroke.center) {
+                    stroke.center.x += dx
+                    stroke.center.y += dy
+
+                    // optional sync (keep for now)
+                    stroke.points = stroke.points.map(p => ({
+                        x: p.x + dx,
+                        y: p.y + dy
+                    }))
+                }
+                else {
+                    stroke.points = stroke.points.map(p => ({
+                        x: p.x + dx,
                         y: p.y + dy
                     }))
                 }
             })
+            lastMouseRef.current = { x, y }
 
             // lastMouseRef.current = { x, y }
 
@@ -570,7 +589,32 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             return
         }
         if(!stroke) return 
-        if(stroke.tool === "rect" || stroke.tool === "line" || stroke.tool === "circle" || stroke.tool === "arrow"){
+        if (stroke.tool === "rect") {
+            const start = stroke.points[0]
+
+            const minX = Math.min(start.x, x)
+            const maxX = Math.max(start.x, x)
+            const minY = Math.min(start.y, y)
+            const maxY = Math.max(start.y, y)
+
+            
+            stroke.center = {
+                x: (minX + maxX) / 2,
+                y: (minY + maxY) / 2
+            }
+
+            stroke.rectSize = {
+                width: maxX - minX,
+                height: maxY - minY
+            }
+
+            stroke.points[1] = { x, y }
+
+            drawGrid()
+            redraw()
+            return
+        }
+        if(stroke.tool === "line" || stroke.tool === "circle" || stroke.tool === "arrow"){
             stroke.points[1] = {x,y}
             drawGrid()
             redraw()
@@ -696,9 +740,11 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
                     if (handle === "br") anchor = { x: minX, y: minY }
 
                     rectResizeSesssionRef.current = {
-                        center,
+                        center: { ...center },              // 🔥 freeze center
                         rotation,
                         anchorLocal: anchor,
+                        initialWidth: stroke.rectSize.width,
+                        initialHeight: stroke.rectSize.height
                     }
                 }
 
@@ -869,7 +915,10 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             width: brushSize,
             groupId: null,
             rotation: tool === "rect" ? 0 : undefined,
-            points: [{x,y}]
+            points: [{x,y}],
+
+            center: tool === "rect" ? {x,y} : undefined,
+            rectSize: tool === "rect" ? {width: 0, height:0} : undefined,
         }
         if(tool === "rect" || tool === "line" || tool === "circle" || tool === "arrow"){
             currentStrokeRef.current.points.push({x,y})
