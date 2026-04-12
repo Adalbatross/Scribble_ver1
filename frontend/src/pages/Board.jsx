@@ -26,6 +26,7 @@ const Board = () => {
     const [copied, setCopied] = useState(false)
     const [users, setUsers] = useState([])
     const [, setSelectionVersion] = useState(0)
+    const [isToolLocked, setisToolLocked] = useState(false)
     if(! userIdRef.current){
         const existing = localStorage.getItem("scribble-user-id")
         if(existing){
@@ -110,6 +111,8 @@ const Board = () => {
     const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef,getSelectionGroupState, offsetYRef, handlers,bringForward, sendBackward, groupSelectedStrokes, ungroupSelectedStrokes, 
 
     } = useCanvasInteractions(tool,
+        setTool,
+        isToolLocked,
         color,
         brushSize,
         socketRef,
@@ -431,6 +434,8 @@ const Board = () => {
             setBrushSize={setBrushSize}
             onUndo={() => socketRef.current.emit("undo")}
             onRedo={() => socketRef.current.emit("redo")}
+            isToolLocked = {isToolLocked}
+            setisToolLocked = {setisToolLocked}
             />
         </div>
         </div>

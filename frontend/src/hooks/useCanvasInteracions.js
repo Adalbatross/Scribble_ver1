@@ -10,7 +10,7 @@ import {
 } from "../utils/canvasUtils"
 import { getRectCenter, inverseRotatePoint} from "../utils/rectUtils"
 
-export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGrid,spacePressRef, userIdRef,notifySelectionChange 
+export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSize, socketRef, drawGrid,spacePressRef, userIdRef,notifySelectionChange 
     // isEditingRef
 ) => {
 
@@ -1031,6 +1031,9 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         ctx.globalCompositeOperation = "source-over"
         currentStrokeRef.current = null
         setIsDrawing(false)
+        if(!isToolLocked && tool !== "select") {
+            setTool("select")
+        }
     }
     const duplicateSelectedStrokes = () => {
         if (selectedIdsRef.current.length === 0) return
@@ -1210,6 +1213,14 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             redraw()
             notifySelectionChange?.()
         }
+        const handleClearSelection = () => {
+            selectedIdsRef.current = []
+            selectedStrokeRef.current = null
+
+            drawGrid()
+            redraw()
+            notifySelectionChange?.()
+        }
         const handleCopySelected = () => {
             copySelectedStrokes()
         }
@@ -1232,6 +1243,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
         window.addEventListener("paste-selected", handlePasteSelected)
         window.addEventListener("group-selected", handleGroupSelected)
         window.addEventListener("ungroup-selected", handleUnGroupSelected)
+        window.addEventListener("clear-selection", handleClearSelection)
         
         return () => {
             window.removeEventListener("delete-selected", handleDeleteSelected)
@@ -1240,6 +1252,7 @@ export const useCanvasInteractions = (tool, color, brushSize, socketRef, drawGri
             window.removeEventListener("paste-selected", handlePasteSelected)
             window.removeEventListener("group-selected", handleGroupSelected)
             window.removeEventListener("ungroup-selected", handleUnGroupSelected)
+            window.removeEventListener("clear-selection", handleClearSelection)
             
         }
 
