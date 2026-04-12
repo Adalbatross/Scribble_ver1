@@ -11,7 +11,7 @@ import {
 } from "../utils/canvasUtils"
 import { getRectCenter, inverseRotatePoint} from "../utils/rectUtils"
 
-export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSize, socketRef, drawGrid,spacePressRef, userIdRef,notifySelectionChange 
+export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSize, socketRef, drawGrid,spacePressRef,roomId, userIdRef,notifySelectionChange 
     // isEditingRef
 ) => {
 
@@ -48,9 +48,15 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
     const rectResizeSesssionRef = useRef(null)
     const isPanningRef = useRef(false)
     const panStartRef = useRef({ x: 0, y: 0 })
+    const remoteCursorsRef = useRef({})
+    // const lastSentRef = useRef(0)
     // const spacePressRef = useRef(false)
 
     const [isDrawing, setIsDrawing] = useState(false)
+    const updateRemoteCursor  = (userId, x, y) =>{
+        remoteCursorsRef.current[userId] = {x, y}
+        redraw()
+    }
     const updateCursor = (handle) => {
         const canvas = canvasRef.current
 
@@ -159,6 +165,74 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
             }
         }, 80)// 🔥 duration of blink (adjust if needed)
     }
+    const getUserColor = (userId) => {
+        const colors = ["#ef4444","#3b82f6","#22c55e","#eab308","#a855f7","#f97316"]
+
+        let hash = 0
+        for (let i = 0; i < userId.length; i++) {
+            hash = userId.charCodeAt(i) + ((hash << 5) - hash)
+        }
+
+        return colors[Math.abs(hash) % colors.length]
+    }
+    const drawRemoteCursor = (ctx, cursor, userId, scale = 1) => {
+        ctx.save()
+
+        const color = getUserColor(userId)
+
+        const x = cursor.x
+        const y = cursor.y
+
+        // 🔥 shadow for visibility
+        ctx.shadowColor = "rgba(0,0,0,0.25)"
+        ctx.shadowBlur = 4
+
+        // 🔥 pointer (clean triangle)
+        ctx.fillStyle = color
+        ctx.beginPath()
+        ctx.moveTo(x, y)
+        ctx.lineTo(x + 10 / scale, y + 18 / scale)
+        ctx.lineTo(x + 5 / scale, y + 14 / scale)
+        ctx.lineTo(x, y + 18 / scale)
+        ctx.closePath()
+        ctx.fill()
+
+        ctx.shadowBlur = 0
+
+        // 🔥 label text
+        const name = userId.slice(0, 4)
+
+        ctx.font = `${12 / scale}px Arial`
+        const textWidth = ctx.measureText(name).width
+
+        const paddingX = 6 / scale
+        // const paddingY = 3 / scale
+
+        const labelX = x + 12 / scale
+        const labelY = y + 12 / scale
+
+        // 🔥 background pill
+        ctx.fillStyle = color
+        ctx.beginPath()
+        ctx.roundRect(
+            labelX,
+            labelY,
+            textWidth + paddingX * 2,
+            14 / scale,
+            4 / scale
+        )
+        ctx.fill()
+
+        // 🔥 text
+        ctx.fillStyle = "white"
+        ctx.fillText(
+            name,
+            labelX + paddingX,
+            labelY + 10 / scale
+        )
+
+        ctx.restore()
+    }
     const redraw = () => {
         const canvas = canvasRef.current
         const ctx = canvas.getContext("2d")
@@ -187,10 +261,10 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
                 ctx.restore()
             }
         })
-        // if(selectedStrokeRef.current){
-        //     drawSelectionBox(ctx, selectedStrokeRef.current, scaleRef.current)
-        // }
-// ✅ Multi selection → show BOTH outer box + inner boxes
+        Object.entries(remoteCursorsRef.current).forEach(([id, cursor])=>{
+            drawRemoteCursor(ctx,cursor,id, scaleRef.current)
+        })
+
         if (selectedIdsRef.current.length > 1) {
             const selectedStrokes = strokeRef.current.filter(s =>
                 selectedIdsRef.current.includes(s.id)
@@ -364,6 +438,13 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
         const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current;
         const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current;
         const stroke = currentStrokeRef.current
+        socketRef.current.emit("cursor-move", {
+            roomId,
+            x,
+            y,
+            userId: userIdRef.current
+        })
+
         if (!isDrawing && tool === "select") {
             const hovered = getStrokeAtPoint(x, y, strokeRef.current, scaleRef.current)
 
@@ -1334,6 +1415,7 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
             onMouseMove: handleMouseMove,
             onMouseUp: handleMouseUp,
             onMouseLeave: handleMouseUp,
-        }
+        },
+        updateRemoteCursor,
     }
 }

@@ -244,6 +244,13 @@ io.on("connection", (socket) => {
 
         socket.broadcast.to(roomId).emit("strokes-add-bulk", normalizedStrokes)
     })
+    socket.on("cursor-move", ({roomId, x, y, userId}) => {
+        socket.to(roomId).emit("cursor-update", {
+            x,
+            y,
+            userId
+        })
+    })
 
     socket.on("disconnect", async () => {
         const roomId = socket.data.roomId

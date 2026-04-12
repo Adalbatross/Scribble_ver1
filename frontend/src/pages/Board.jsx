@@ -108,7 +108,9 @@ const Board = () => {
         ctx.restore() 
         
     }
-    const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef,getSelectionGroupState, offsetYRef, handlers,bringForward, sendBackward, groupSelectedStrokes, ungroupSelectedStrokes, 
+    const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef
+        ,getSelectionGroupState, offsetYRef, handlers,bringForward, sendBackward,
+         groupSelectedStrokes, ungroupSelectedStrokes,updateRemoteCursor 
 
     } = useCanvasInteractions(tool,
         setTool,
@@ -118,6 +120,7 @@ const Board = () => {
         socketRef,
         drawGrid,
         spacePressRef,
+        id,
         userIdRef,
         ()=> setSelectionVersion(v=>v+1)
     )
@@ -174,6 +177,9 @@ const Board = () => {
                 drawGrid()
                 redraw()
             }
+        })
+        socketRef.current.on("cursor-update", ({x, y, userId})=>{
+            updateRemoteCursor(userId, x,y)
         })
         socketRef.current.on("strokes-add-bulk", (newStrokes) => {
             strokeRef.current.push(...newStrokes)
