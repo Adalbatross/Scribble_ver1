@@ -243,7 +243,7 @@ export const drawSelectionBox = (ctx, stroke,scale) =>{
     ctx.setLineDash([])
     ctx.restore() 
 }   
-const getTextBounds = (stroke) => {
+export const getTextBounds = (stroke) => {
     if (!stroke || stroke.tool !== "text" || !stroke.points?.length) {
         return null
     }

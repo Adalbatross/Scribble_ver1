@@ -81,7 +81,7 @@ const Toolbar = ({ tool, setTool, onUndo, onRedo, isToolLocked, setisToolLocked 
       </ToolButton>
 
       <ToolButton active={tool === "text"} onClick={() => {setTool("text")
-        window.dispatchEvent(new Event("clear-selection"))
+        // window.dispatchEvent(new Event("clear-selection"))
       }}>
         <TextIcon />
       </ToolButton>

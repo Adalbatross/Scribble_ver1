@@ -389,6 +389,9 @@ const Board = () => {
         drawGrid()
         redraw()
         setTextInput(null)
+        if (!isToolLocked){
+            setTool("select")
+        }
     }
     useEffect(() => {
         if (!textInput) return

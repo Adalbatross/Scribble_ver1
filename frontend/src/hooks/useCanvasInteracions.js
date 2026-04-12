@@ -6,7 +6,8 @@ import {
     getHandleAtPoint, 
     getGroupBounds,
     isPointInGroupBounds,
-    isStrokeInBounds
+    isStrokeInBounds,
+    getTextBounds
 } from "../utils/canvasUtils"
 import { getRectCenter, inverseRotatePoint} from "../utils/rectUtils"
 
@@ -33,6 +34,7 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
     const lastErasedRef = useRef(null)
     const textResizeStartRef = useRef(null)
     const selectedIdsRef = useRef([])
+    const hoveredIdRef = useRef(null)
     const multiDragStartRef = useRef({})
     const marqueeStartRef = useRef(null)
     const marqueeCurrentRef = useRef(null)
@@ -44,35 +46,6 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
     const rotateStartAngleRef = useRef(0)
     const intitialRotationRef = useRef(0) 
     const rectResizeSesssionRef = useRef(null)
-
-    // const undoStackRef = useRef([])
-    // const redoStackRef = useRef([])
-    // const cloneStrokes = () => {
-    //     return JSON.parse(JSON.stringify(strokeRef.current))
-    // }
-    // const undo  = () => {
-    //     if(undoStackRef.current.length === 0) return
-
-    //     const prevState = undoStackRef.current.pop()
-
-    //     redoStackRef.current.push(cloneStrokes())
-
-    //     strokeRef.current = prevState
-
-    //     redraw()
-    // }
-    // const redo  = () => {
-    //     if(redoStackRef.current.length === 0) return
-
-    //     const nextState = redoStackRef.current.pop()
-
-    //     undoStackRef.current.push(cloneStrokes())
-
-    //     strokeRef.current = nextState
-
-    //     redraw()
-    // }
-
     const isPanningRef = useRef(false)
     const panStartRef = useRef({ x: 0, y: 0 })
     // const spacePressRef = useRef(false)
@@ -102,7 +75,74 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
         else {
             canvas.style.cursor = "crosshair"
     }
-}
+}   
+    const drawStrokePath = (ctx, stroke) => {
+        ctx.beginPath()
+
+        if (stroke.tool === "rect" && stroke.center && stroke.rectSize) {
+            const { x, y } = stroke.center
+            const { width, height } = stroke.rectSize
+            const rotation = stroke.rotation || 0
+
+            ctx.save()
+            ctx.translate(x, y)
+            ctx.rotate(rotation)
+
+            ctx.rect(-width / 2, -height / 2, width, height)
+
+            ctx.restore()
+            return
+        }
+
+        if (stroke.points?.length) {
+            ctx.moveTo(stroke.points[0].x, stroke.points[0].y)
+            for (let i = 1; i < stroke.points.length; i++) {
+                ctx.lineTo(stroke.points[i].x, stroke.points[i].y)
+            }
+        }
+    }
+    const drawHoverOutline = (ctx, stroke, scale = 1) => {
+        ctx.save()
+
+        if (stroke.tool === "text") {
+            const bounds = getTextBounds(stroke)
+            if (!bounds) return
+
+            const { x, y, width, height } = bounds
+
+            // white background outline
+            ctx.strokeStyle = "rgba(255,255,255,0.9)"
+            ctx.lineWidth = (3 / scale)
+            ctx.strokeRect(x, y, width, height)
+
+            // blue border
+            ctx.strokeStyle = "#3b82f6"
+            ctx.lineWidth = (1.5 / scale)
+            ctx.strokeRect(x, y, width, height)
+
+            ctx.restore()
+            return
+        }
+        const baseWidth = 2 / scale
+
+        // 🔥 LAYER 1 — WHITE OUTLINE (contrast)
+        ctx.strokeStyle = "rgba(255,255,255,0.9)"
+        ctx.lineWidth = baseWidth * 2.5
+
+        drawStrokePath(ctx, stroke)
+
+        ctx.stroke()
+
+        // 🔥 LAYER 2 — BLUE OUTLINE
+        ctx.strokeStyle = "#3b82f6"
+        ctx.lineWidth = baseWidth
+
+        drawStrokePath(ctx, stroke)
+
+        ctx.stroke()
+
+        ctx.restore()
+    }
 
     // redraw function that redraws the canvas everytime
     const triggerGroupFlash = () => {
@@ -139,6 +179,9 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
             }
 
             drawStroke(ctx, stroke, scaleRef.current)
+            if(stroke.id === hoveredIdRef.current && tool === "select"){
+                drawHoverOutline(ctx, stroke, scaleRef.current)
+            }
 
             if (isHovered) {
                 ctx.restore()
@@ -321,6 +364,16 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
         const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current;
         const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current;
         const stroke = currentStrokeRef.current
+        if (!isDrawing && tool === "select") {
+            const hovered = getStrokeAtPoint(x, y, strokeRef.current, scaleRef.current)
+
+            const newHoveredId = hovered?.id || null
+
+            if(hoveredIdRef.current !== newHoveredId) {
+                hoveredIdRef.current = newHoveredId
+                redraw()
+            }
+        }
         if(tool === "eraser" && isErasingRef.current){
             const hitStroke = getStrokeAtPoint(
                 x,
@@ -905,6 +958,9 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
                     detail: textStroke
                 })
             )
+            // if(!isToolLocked) {
+            //     setTool("select")
+            // }
             return
         }
         currentStrokeRef.current = {
@@ -1008,6 +1064,7 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
             multiDragStartRef.current = {}
             textResizeStartRef.current = null
             rectResizeSesssionRef.current = null
+            hoveredIdRef.current = null
             setIsDrawing(false)
             drawGrid()
             redraw()
