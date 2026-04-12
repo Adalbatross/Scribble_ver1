@@ -27,6 +27,8 @@ const Board = () => {
     const [users, setUsers] = useState([])
     const [, setSelectionVersion] = useState(0)
     const [isToolLocked, setisToolLocked] = useState(false)
+    const [strokeStyle, setStrokeStyle] = useState("solid")
+    const [fillColor, setFillColor] = useState(null)
     if(! userIdRef.current){
         const existing = localStorage.getItem("scribble-user-id")
         if(existing){
@@ -112,11 +114,14 @@ const Board = () => {
         ,getSelectionGroupState, offsetYRef, handlers,bringForward, sendBackward,
          groupSelectedStrokes, ungroupSelectedStrokes,updateRemoteCursor 
 
-    } = useCanvasInteractions(tool,
+    } = useCanvasInteractions(
+        tool,
         setTool,
         isToolLocked,
         color,
         brushSize,
+        strokeStyle,
+        fillColor,
         socketRef,
         drawGrid,
         spacePressRef,
@@ -465,6 +470,10 @@ const Board = () => {
             onUngroup={ungroupSelectedStrokes}
             canGroup = {canGroup}
             canUngroup = {canUngroup}
+            strokeStyle = {strokeStyle}
+            setStrokeStyle = {setStrokeStyle}
+            fillColor={fillColor}
+            setFillColor = {setFillColor}
         />
         </div>
 

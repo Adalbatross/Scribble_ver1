@@ -1,10 +1,31 @@
 import { distanceToSegment, getRectBounds, getRotatedRectCorners } from "./rectUtils"
 
+export const applyOpacity = (color, opacity = 0.25) => {
+    if (!color) return null
 
-export const drawStroke = (ctx, stroke) =>{
+    // handle hex (#rrggbb)
+    if (color.startsWith("#")) {
+        const r = parseInt(color.slice(1, 3), 16)
+        const g = parseInt(color.slice(3, 5), 16)
+        const b = parseInt(color.slice(5, 7), 16)
+
+        return `rgba(${r}, ${g}, ${b}, ${opacity})`
+    }
+
+    return color
+}
+export const drawStroke = (ctx, stroke, scale) =>{
         if (!stroke.points.length) return
         ctx.lineWidth = stroke.width
         ctx.strokeStyle = stroke.color
+        if (stroke.style === "dashed") {
+            ctx.setLineDash([10 / scale, 6 / scale])
+        } else if (stroke.style === "dotted") {
+            ctx.lineCap = "round"
+            ctx.setLineDash([2 / scale, 6 / scale])
+        } else {
+            ctx.setLineDash([])
+        }
         
         
         if (stroke.tool === "eraser") {
@@ -23,63 +44,76 @@ export const drawStroke = (ctx, stroke) =>{
             }
             
             ctx.stroke()
+            ctx.setLineDash([])
         }
         if (stroke.tool === "rect" && stroke.center && stroke.rectSize) {
             const { x, y } = stroke.center
             const { width, height } = stroke.rectSize
             const rotation = stroke.rotation || 0
-
+            
             ctx.save()
             ctx.translate(x, y)
             ctx.rotate(rotation)
-
+            
             ctx.beginPath()
             ctx.rect(-width / 2, -height / 2, width, height)
+            if(stroke.fill) {
+                ctx.fillStyle = stroke.fill
+                ctx.fill()
+            }
             ctx.stroke()
-
+            ctx.setLineDash([])
+            
             ctx.restore()
         }
         if((stroke.tool === "line" || stroke.tool === "arrow" ) && stroke.points.length >= 2){
             const p1 = stroke.points[0]
             const p2 = stroke.points[1]
-
+            
             ctx.beginPath()
             ctx.moveTo(p1.x, p1.y)
             ctx.lineTo(p2.x, p2.y)
             ctx.stroke()
-
+            ctx.setLineDash([])
+            
             if (stroke.tool === "arrow") {
                 const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x)
-
+                
                 // arrow head size based on stroke width
                 const headLength = Math.max(12, stroke.width * 3)
                 const headAngle = Math.PI / 7
-
+                
                 const x1 = p2.x - headLength * Math.cos(angle - headAngle)
                 const y1 = p2.y - headLength * Math.sin(angle - headAngle)
-
+                
                 const x2 = p2.x - headLength * Math.cos(angle + headAngle)
                 const y2 = p2.y - headLength * Math.sin(angle + headAngle)
-
+                
                 ctx.beginPath()
                 ctx.moveTo(p2.x, p2.y)
                 ctx.lineTo(x1, y1)
                 ctx.moveTo(p2.x, p2.y)
                 ctx.lineTo(x2, y2)
                 ctx.stroke()
+                ctx.setLineDash([])
             }
         }
         if (stroke.tool === "circle" && stroke.points.length>=2){
             const p1 = stroke.points[0]
             const p2 = stroke.points[1]
-
+            
             const dx = p2.x - p1.x
             const dy = p2.y - p1.y
-
+            
             const radius  = Math.sqrt(dx*dx + dy*dy)
             ctx.beginPath()
             ctx.arc(p1.x, p1.y, radius, 0, Math.PI * 2)
+            if(stroke.fill) {
+                ctx.fillStyle = stroke.fill
+                ctx.fill()
+            }
             ctx.stroke()
+            ctx.setLineDash([])
         }
         if (stroke.tool === "text" && stroke.points.length >= 1) {
             if (window.__editingTextId && stroke.id === window.__editingTextId) return

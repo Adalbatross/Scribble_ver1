@@ -9,6 +9,14 @@ const COLORS = [
   "#eab308",
   "#a855f7"
 ]
+const FILL_COLORS = [
+  "rgba(0,0,0,0.5)",
+  "rgba(239,68,68,0.5)",
+  "rgba(34,197,94,0.5)",
+  "rgba(59,130,246,0.5)",
+  "rgba(234,179,8,0.5)",
+  "rgba(168,85,247,0.5)"
+]
 
 const ToolButton = ({ active, onClick, children, title }) => (
   <button
@@ -23,17 +31,19 @@ const ToolButton = ({ active, onClick, children, title }) => (
     {children}
   </button>
 )
-const ToolOptionsPanel = ({ tool, color, setColor, brushSize, setBrushSize, onBringForward, onSendBackward, onGroup, onUngroup, canGroup, canUngroup }) => {
+const ToolOptionsPanel = ({ tool, color, setColor, brushSize, setBrushSize, onBringForward, onSendBackward, onGroup, onUngroup, canGroup, canUngroup, strokeStyle, setStrokeStyle, fillColor, setFillColor }) => {
 
   const showColor = ["pen", "rect", "line", "circle","arrow","text"].includes(tool)
   const showSize = ["pen", "line","rect", "circle", "arrow", "text"].includes(tool)
+  const showStrokeStyle = ["line","rect", "circle", "arrow"].includes(tool)
+  const showFill = ["rect", "circle"].includes(tool)
   const showLayerControls = tool === "select"
 
-  if (!showColor && !showSize && !showLayerControls) return null
+  if (!showColor && !showSize && !showLayerControls && !showStrokeStyle) return null
 
   return (
     <div className={`w-52 bg-white shadow-md rounded-xl px-3 py-3 border flex flex-col gap-4 pointer-events-auto
-        ${showColor || showSize || showLayerControls ? "flex" : "hidden"}
+        ${showColor || showSize || showLayerControls || showStrokeStyle ? "flex" : "hidden"}
     `}>
 
       {showColor && (
@@ -81,6 +91,69 @@ const ToolOptionsPanel = ({ tool, color, setColor, brushSize, setBrushSize, onBr
             />
           </div>
         </div>
+      )}
+      {showStrokeStyle && (
+        <>
+          {(showColor || showSize) && <div className="border-t"></div>}
+
+          <div className="flex flex-col gap-2">
+            <div className="text-xs text-gray-500 font-medium">Stroke</div>
+
+            <div className="flex gap-2">
+              <ToolButton
+                active={strokeStyle === "solid"}
+                onClick={() => setStrokeStyle("solid")}
+                title="Solid"
+              >
+                ━
+              </ToolButton>
+
+              <ToolButton
+                active={strokeStyle === "dashed"}
+                onClick={() => setStrokeStyle("dashed")}
+                title="Dashed"
+              >
+                ╌╌
+              </ToolButton>
+
+              <ToolButton
+                active={strokeStyle === "dotted"}
+                onClick={() => setStrokeStyle("dotted")}
+                title="Dotted"
+              >
+                ···
+              </ToolButton>
+            </div>
+          </div>
+        </>
+      )}
+      {showFill && (
+        <>
+          <div className="border-t"></div>
+
+          <div className="flex flex-col gap-2">
+            <div className="text-xs text-gray-500 font-medium">Fill</div>
+
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setFillColor(null)}
+                className="w-6 h-6 border rounded"
+                title="No Fill"
+              />
+
+              {FILL_COLORS.map(c => (
+                <button
+                  key={c}
+                  onClick={() => setFillColor(c)}
+                  className={`w-6 h-6 rounded ${
+                    fillColor === c ? "ring-2 ring-black" : ""
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {showLayerControls && (

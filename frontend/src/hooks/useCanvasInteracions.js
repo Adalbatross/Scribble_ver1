@@ -11,7 +11,7 @@ import {
 } from "../utils/canvasUtils"
 import { getRectCenter, inverseRotatePoint} from "../utils/rectUtils"
 
-export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSize, socketRef, drawGrid,spacePressRef,roomId, userIdRef,notifySelectionChange 
+export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSize,strokeStyle,fillColor, socketRef, drawGrid,spacePressRef,roomId, userIdRef,notifySelectionChange 
     // isEditingRef
 ) => {
 
@@ -1050,6 +1050,8 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
             tool,
             color,
             width: brushSize,
+            style: strokeStyle,
+            fill: fillColor,
             groupId: null,
             rotation: tool === "rect" ? 0 : undefined,
             points: [{x,y}],
