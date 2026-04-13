@@ -29,6 +29,7 @@ const Board = () => {
     const [isToolLocked, setisToolLocked] = useState(false)
     const [strokeStyle, setStrokeStyle] = useState("solid")
     const [fillColor, setFillColor] = useState(null)
+    const [strokeOpacity, setStrokeOpacity] = useState(1)
     if(! userIdRef.current){
         const existing = localStorage.getItem("scribble-user-id")
         if(existing){
@@ -122,6 +123,7 @@ const Board = () => {
         brushSize,
         strokeStyle,
         fillColor,
+        strokeOpacity,
         socketRef,
         drawGrid,
         spacePressRef,
@@ -474,6 +476,8 @@ const Board = () => {
             setStrokeStyle = {setStrokeStyle}
             fillColor={fillColor}
             setFillColor = {setFillColor}
+            setStrokeOpacity={setStrokeOpacity}
+            strokeOpacity={strokeOpacity}
         />
         </div>
 

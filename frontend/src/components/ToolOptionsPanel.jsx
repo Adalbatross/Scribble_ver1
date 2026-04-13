@@ -31,12 +31,15 @@ const ToolButton = ({ active, onClick, children, title }) => (
     {children}
   </button>
 )
-const ToolOptionsPanel = ({ tool, color, setColor, brushSize, setBrushSize, onBringForward, onSendBackward, onGroup, onUngroup, canGroup, canUngroup, strokeStyle, setStrokeStyle, fillColor, setFillColor }) => {
+const ToolOptionsPanel = ({ tool, color, setColor, brushSize, setBrushSize, onBringForward,
+    onSendBackward, onGroup, onUngroup, canGroup,
+    canUngroup, strokeStyle, setStrokeStyle, fillColor, setFillColor, setStrokeOpacity, strokeOpacity }) => {
 
   const showColor = ["pen", "rect", "line", "circle","arrow","text"].includes(tool)
   const showSize = ["pen", "line","rect", "circle", "arrow", "text"].includes(tool)
   const showStrokeStyle = ["line","rect", "circle", "arrow"].includes(tool)
   const showFill = ["rect", "circle"].includes(tool)
+  const showOpacity = ["pen", "line","rect", "circle", "arrow", "text"].includes(tool) 
   const showLayerControls = tool === "select"
 
   if (!showColor && !showSize && !showLayerControls && !showStrokeStyle) return null
@@ -151,6 +154,33 @@ const ToolOptionsPanel = ({ tool, color, setColor, brushSize, setBrushSize, onBr
                   style={{ backgroundColor: c }}
                 />
               ))}
+            </div>
+          </div>
+        </>
+      )}
+      {showOpacity && (
+        <>
+          <div className="border-t"></div>
+
+          <div className="flex flex-col gap-2">
+            <div className="text-xs text-gray-500 font-medium">
+              Opacity
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-xs w-8">
+                {Math.round(strokeOpacity * 100)}%
+              </span>
+
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.05"
+                value={strokeOpacity}
+                onChange={(e) => setStrokeOpacity(Number(e.target.value))}
+                className="flex-1 accent-blue-500"
+              />
             </div>
           </div>
         </>

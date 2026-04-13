@@ -1,9 +1,8 @@
 import { distanceToSegment, getRectBounds, getRotatedRectCorners } from "./rectUtils"
 
-export const applyOpacity = (color, opacity = 0.25) => {
-    if (!color) return null
+export const applyStrokeOpacity = (color, opacity = 1) => {
+    if (!color) return color
 
-    // handle hex (#rrggbb)
     if (color.startsWith("#")) {
         const r = parseInt(color.slice(1, 3), 16)
         const g = parseInt(color.slice(3, 5), 16)
@@ -17,12 +16,24 @@ export const applyOpacity = (color, opacity = 0.25) => {
 export const drawStroke = (ctx, stroke, scale) =>{
         if (!stroke.points.length) return
         ctx.lineWidth = stroke.width
-        ctx.strokeStyle = stroke.color
+        ctx.lineCap = stroke.style === "dotted" ? "round" : "butt"
+        ctx.strokeStyle = applyStrokeOpacity(
+            stroke.color,
+            stroke.opacity ?? 1
+        )
+        const base = stroke.width || 1
         if (stroke.style === "dashed") {
-            ctx.setLineDash([10 / scale, 6 / scale])
-        } else if (stroke.style === "dotted") {
+            ctx.setLineDash([
+                (base * 4) ,
+                (base * 2) 
+            ])
+        }else if (stroke.style === "dotted") {
             ctx.lineCap = "round"
-            ctx.setLineDash([2 / scale, 6 / scale])
+
+            const dot = 0.1 / scale   // 🔥 VERY SMALL DASH
+            const gap = (stroke.width * 2) / scale
+
+            ctx.setLineDash([dot, gap])
         } else {
             ctx.setLineDash([])
         }

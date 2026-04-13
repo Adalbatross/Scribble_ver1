@@ -11,7 +11,7 @@ import {
 } from "../utils/canvasUtils"
 import { getRectCenter, inverseRotatePoint} from "../utils/rectUtils"
 
-export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSize,strokeStyle,fillColor, socketRef, drawGrid,spacePressRef,roomId, userIdRef,notifySelectionChange 
+export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSize,strokeStyle,fillColor,strokeOpacity, socketRef, drawGrid,spacePressRef,roomId, userIdRef,notifySelectionChange 
     // isEditingRef
 ) => {
 
@@ -1049,6 +1049,7 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
             userId: userIdRef.current,
             tool,
             color,
+            opacity: strokeOpacity,
             width: brushSize,
             style: strokeStyle,
             fill: fillColor,
@@ -1195,15 +1196,29 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
                 newGroupId = oldToNewGroupMap[stroke.groupId]
             }
 
-            return {
-                ...structuredClone(stroke),
-                id: crypto.randomUUID(),
-                groupId: newGroupId,
-                points: stroke.points.map(p => ({
+            const cloned = structuredClone(stroke)
+
+            cloned.id = crypto.randomUUID()
+            cloned.groupId = newGroupId
+
+            if (cloned.tool === "rect" && cloned.center) {
+                cloned.center.x += OFFSET
+                cloned.center.y += OFFSET
+
+                // keep points in sync
+                cloned.points = cloned.points.map(p => ({
+                    x: p.x + OFFSET,
+                    y: p.y + OFFSET
+                }))
+            } 
+            else {
+                cloned.points = cloned.points.map(p => ({
                     x: p.x + OFFSET,
                     y: p.y + OFFSET
                 }))
             }
+
+            return cloned
         })
 
         
@@ -1246,15 +1261,29 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
                 newGroupId = oldToNewGroupMap[stroke.groupId]
             }
 
-            return {
-                ...structuredClone(stroke),
-                id: crypto.randomUUID(),
-                groupId: newGroupId,
-                points: stroke.points.map(p => ({
+            const cloned = structuredClone(stroke)
+
+            cloned.id = crypto.randomUUID()
+            cloned.groupId = newGroupId
+
+            if (cloned.tool === "rect" && cloned.center) {
+                cloned.center.x += OFFSET
+                cloned.center.y += OFFSET
+
+                // keep points in sync
+                cloned.points = cloned.points.map(p => ({
+                    x: p.x + OFFSET,
+                    y: p.y + OFFSET
+                }))
+            } 
+            else {
+                cloned.points = cloned.points.map(p => ({
                     x: p.x + OFFSET,
                     y: p.y + OFFSET
                 }))
             }
+
+            return cloned
         })
 
         strokeRef.current.push(...pasted)
