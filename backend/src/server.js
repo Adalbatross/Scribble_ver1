@@ -1,11 +1,19 @@
 const express = require("express")
+require("dotenv").config()
 const http = require("http")
 const { Server } = require("socket.io")
-const { connectDB } = require("./db")
-const Board = require("./models/Board.model")
+const { connectDB } = require("./config/db")
+const Board = require("./models/Board.model.js")
+const Stroke = require("./models/Strokes.model.js")
+const cors = require("cors")
 connectDB()
 const roomUsers = {}
 const app = express()
+app.use(cors({
+    origin: "http://localhost:5173",
+    credentials:true
+}))
+app.use(express.json())
 const saveTimer = {}
 const MAX_UNDO = 50
 const rooms = {}
@@ -18,23 +26,39 @@ const io = new Server(server, {
         methods: ["GET", "POST"]
     }
 })
-const scheduleSave = (roomId) =>{
-    if(!rooms[roomId]) return 
+console.log(process.env.JWT_SECRET)
+const authRoutes = require("./routes/auth.routes.js")
+app.use("/api/auth", authRoutes)
+const boardRoutes = require("./routes/board.routes.js")
+app.use("/api/boards", boardRoutes)
+const scheduleSave = (roomId, boardId) => {
+    if (!rooms[roomId]) return
 
-    if(saveTimer[roomId]){
+    if (saveTimer[roomId]) {
         clearTimeout(saveTimer[roomId])
     }
 
-    saveTimer[roomId] = setTimeout(async()=>{
-        try {  
-            await Board.findByIdAndUpdate(roomId, {
-                strokes: rooms[roomId]
-            })
-            console.log(`saved board ${roomId}`);
+    saveTimer[roomId] = setTimeout(async () => {
+        try {
+            await Stroke.deleteMany({ boardId })
+
+            const strokesToInsert = rooms[roomId]
+            .filter(s => s.id)
+            .map(s => ({
+                ...s,
+                strokeId: s.id,
+                boardId
+            }))
+
+            if (strokesToInsert.length > 0) {
+                await Stroke.insertMany(strokesToInsert)
+            }
+
+            console.log(`saved board ${roomId}`)
         } catch (error) {
-            console.error("save failed: ", error)
+            console.error("save failed:", error)
         }
-    },500)
+    }, 500)
 }
 
 io.on("connection", (socket) => {
@@ -44,17 +68,22 @@ io.on("connection", (socket) => {
         socket.join(roomId)
         socket.data.roomId = roomId
         socket.data.userId = userId
-        if(!rooms[roomId]){
-            const board = await Board.findById(roomId).lean()
-            if(board){
-                rooms[roomId] = board.strokes
-            }else{
-                rooms[roomId] = []
-                await Board.create({
-                    _id: roomId,
-                    strokes: []
-                })
-            }
+        const board = await Board.findOne({ roomId })
+
+        if (!board) {
+            return socket.disconnect()
+        }
+
+        // 🔥 ALWAYS set this
+        socket.data.boardId = board._id
+
+        if (!rooms[roomId]) {
+            const strokes = await Stroke.find({ boardId: board._id }).lean()
+
+            rooms[roomId] = strokes.map(s => ({
+                ...s,
+                id: s.strokeId   // 🔥 CRITICAL FIX
+            }))
         }
         if(!roomUsers[roomId]) roomUsers[roomId] = []
         roomUsers[roomId].push({
@@ -65,7 +94,7 @@ io.on("connection", (socket) => {
         if(!roomRedo[roomId]) roomRedo[roomId] = []
         if(!roomUndo[roomId]) roomUndo[roomId] = []
         socket.emit("load-history", rooms[roomId])
-        console.log(`Room created ${roomId}`);
+        console.log(`Room joined ${roomId}`);
         
         console.log(`Socket ${socket.id} joined room ${roomId}`)
     })
@@ -89,7 +118,14 @@ io.on("connection", (socket) => {
         }
         
         rooms[roomId].push(newStroke)
-        await scheduleSave(roomId)
+
+        await Stroke.create({
+            ...newStroke,
+            strokeId: newStroke.id,
+            boardId: socket.data.boardId
+        })
+
+        scheduleSave(roomId, socket.data.boardId)
         
         socket.broadcast.to(roomId).emit("stroke-complete", newStroke)
     })
@@ -110,7 +146,7 @@ io.on("connection", (socket) => {
                 ...stroke,
                 userId: existingUserId
             }
-            await scheduleSave(roomId)
+            await scheduleSave(roomId, socket.data.boardId)
         }
 
         socket.broadcast.to(roomId).emit("stroke-move", stroke)
@@ -137,7 +173,7 @@ io.on("connection", (socket) => {
 
         rooms[roomId] = rooms[roomId].filter(s=> s.id !== id)
 
-        scheduleSave(roomId)
+        scheduleSave(roomId, socket.data.boardId)
 
         socket.broadcast.to(roomId).emit("stroke-delete", {id})
     })
@@ -156,7 +192,7 @@ io.on("connection", (socket) => {
 
             rooms[roomId] = updatedStrokes
 
-            scheduleSave(roomId)
+            scheduleSave(roomId, socket.data.boardId)
 
             socket.broadcast.to(roomId).emit("strokes-reordered", updatedStrokes)
         } catch (err) {
@@ -211,7 +247,7 @@ io.on("connection", (socket) => {
             }
         })
 
-        scheduleSave(roomId)
+        scheduleSave(roomId, socket.data.boardId)
 
         socket.broadcast.to(roomId).emit("strokes-move", updatedStrokes)
     })
@@ -234,13 +270,14 @@ io.on("connection", (socket) => {
 
         const normalizedStrokes = strokesArray.map(stroke => ({
             ...stroke,
+            strokeId: stroke.id,
             userId,
             groupId: stroke.groupId ?? null
         }))
 
         rooms[roomId].push(...normalizedStrokes)
 
-        scheduleSave(roomId)
+        scheduleSave(roomId, socket.data.boardId)
 
         socket.broadcast.to(roomId).emit("strokes-add-bulk", normalizedStrokes)
     })
@@ -264,9 +301,19 @@ io.on("connection", (socket) => {
         if(saveTimer[roomId]){
             clearTimeout(saveTimer[roomId])
             
-            await Board.findByIdAndUpdate(roomId, {
-                strokes: rooms[roomId]
-            })
+            await Stroke.deleteMany({ boardId: socket.data.boardId })
+
+            const strokesToInsert = rooms[roomId]
+            .filter(s => s.id)   
+            .map(s => ({
+                ...s,
+                strokeId: s.id,
+                boardId: socket.data.boardId
+            }))
+
+            if (strokesToInsert.length > 0) {
+                await Stroke.insertMany(strokesToInsert)
+            }
         }
         console.log("User disconnected:", socket.id)
     })
@@ -284,7 +331,7 @@ io.on("connection", (socket) => {
 
         rooms[roomId] = rooms[roomId].filter(stroke => !ids.includes(stroke.id))
 
-        scheduleSave(roomId)
+        scheduleSave(roomId, socket.data.boardId)
 
         socket.broadcast.to(roomId).emit("delete-selected", ids)
     })

@@ -1,18 +1,47 @@
 import { useNavigate } from "react-router-dom"
-import { nanoid } from "nanoid"
 import { useState } from "react"
+import AuthPage from "./AuthPage"
 
 function Home() {
   const navigate = useNavigate()
   const [joinId, setJoinId] = useState("")
 
-  const createBoard = () => {
-    const id = nanoid(8)
-    navigate(`/board/${id}`)
+  const createBoard = async () => {
+    const token = localStorage.getItem("token")
+
+    if (!token) {
+      navigate("/login")
+      return
+    }
+
+    const res = await fetch("http://localhost:5000/api/boards", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`
+      }
+    })
+
+    const data = await res.json()
+
+    if (!data.roomId) {
+      console.error("Board creation failed:", data)
+      return
+    }
+
+    navigate(`/board/${data.roomId}`)
   }
 
   const joinBoard = () => {
     if (!joinId.trim()) return
+
+    const token = localStorage.getItem("token")
+
+    if (!token) {
+      console.log("NO token -> redirecting");
+      navigate("/login")
+      return
+    }
+
     navigate(`/board/${joinId}`)
   }
 
@@ -20,7 +49,7 @@ function Home() {
     <div style={{ textAlign: "center", marginTop: "100px" }}>
       <h1>Lets Collab</h1>
 
-      <button  className="text-red-700 " onClick={createBoard}>
+      <button onClick={createBoard}>
         Create New Board
       </button>
 
