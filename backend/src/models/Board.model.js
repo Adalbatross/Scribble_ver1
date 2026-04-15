@@ -16,6 +16,9 @@ const BoardSchema = new mongoose.Schema({
         type: String,
         required: true,
         unique: true
+    },
+    thumbnail: {
+        type: String
     }
 }, {timestamps: true})
 

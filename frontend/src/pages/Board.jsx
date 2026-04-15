@@ -7,6 +7,7 @@ import { useParams } from 'react-router-dom'
 import Toolbar from '../components/Toolbar'
 import { useCanvasInteractions } from '../hooks/useCanvasInteracions'
 import ToolOptionsPanel from '../components/ToolOptionsPanel'
+import { useLocation } from "react-router-dom";
 
 const Board = () => {
     const MIN_ZOOM = 0.1
@@ -17,12 +18,14 @@ const Board = () => {
     const socketRef = useRef(null)
     const spacePressRef = useRef(false)
     const userIdRef = useRef(null)
+    const lastThumbnailRef = useRef(null)
     const [tool, setTool] = useState("select")
     const [color, setColor] = useState("black")
     const [brushSize, setBrushSize] = useState(5)
     const [textInput, setTextInput] = useState(null)
     const editorRef= useRef(null)
     const isEditingRef = useRef(false)
+    const location = useLocation();
     const [copied, setCopied] = useState(false)
     const [users, setUsers] = useState([])
     const [, setSelectionVersion] = useState(0)
@@ -30,6 +33,7 @@ const Board = () => {
     const [strokeStyle, setStrokeStyle] = useState("solid")
     const [fillColor, setFillColor] = useState(null)
     const [strokeOpacity, setStrokeOpacity] = useState(1)
+    const [boardTitle, setBoardTitle] = useState("")
     if(! userIdRef.current){
         const existing = localStorage.getItem("scribble-user-id")
         if(existing){
@@ -40,6 +44,46 @@ const Board = () => {
             userIdRef.current = newId
         }
     }
+    const generateThumbnail = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return null;
+
+        const tempCanvas = document.createElement("canvas");
+        const ctx = tempCanvas.getContext("2d");
+
+        // small preview size
+        tempCanvas.width = 300;
+        tempCanvas.height = 200;
+
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+        ctx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height);
+
+        return tempCanvas.toDataURL("image/jpeg", 0.7);
+    };
+    const saveThumbnail = async () => {
+        try {
+            const thumbnail = lastThumbnailRef.current;
+
+            if (!thumbnail) {
+            console.log("NO THUMBNAIL AVAILABLE");
+            return;
+            }
+
+            await fetch(`http://localhost:5000/api/boards/${id}/thumbnail`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ thumbnail }),
+            });
+
+            console.log("Thumbnail saved via fetch");
+        } catch (err) {
+            console.error("Thumbnail error:", err);
+        }
+    };
     const handleCopy = async () => {
     const url = `${window.location.origin}/board/${id}`
 
@@ -259,8 +303,8 @@ const Board = () => {
                 spacePressRef.current = true
                 canvasRef.current.style.cursor = "grab"
             }
-            const isUndo = (e.ctrlKey || e.metaKey) && e.key === "z"
-            const isRedo = (e.ctrlKey || e.metaKey) && (e.key === "y" || (e.shiftKey && e.key === "Z"))
+            const isUndo = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z"
+            const isRedo = (e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "y" || (e.shiftKey && e.key.toLowerCase() === "Z"))
 
             if (isUndo) {
                 e.preventDefault()
@@ -275,7 +319,7 @@ const Board = () => {
             if(isDelete) {
                 window.dispatchEvent(new CustomEvent("delete-selected"))
             }  
-            const isDuplicate = (e.ctrlKey || e.metaKey) && e.key === "d"   
+            const isDuplicate = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d"   
             if(isDuplicate){
                 e.preventDefault()
                 window.dispatchEvent(new CustomEvent("duplicate-selected"))
@@ -337,6 +381,29 @@ const Board = () => {
         isEditingRef.current = !!textInput
     }, [textInput])
     useEffect(() => {
+        const interval = setInterval(() => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+
+            const tempCanvas = document.createElement("canvas");
+            const ctx = tempCanvas.getContext("2d");
+
+            tempCanvas.width = 300;
+            tempCanvas.height = 200;
+
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, 300, 200);
+
+            ctx.drawImage(canvas, 0, 0, 300, 200);
+
+            lastThumbnailRef.current = tempCanvas.toDataURL("image/jpeg", 0.6);
+
+            console.log("Thumbnail cached");
+        }, 2000); // every 2 sec
+
+        return () => clearInterval(interval);
+    }, []);
+    useEffect(() => {
         if (textInput && editorRef.current) {
             requestAnimationFrame(() => {
                 if (editorRef.current) {
@@ -346,6 +413,12 @@ const Board = () => {
             })
         }
     }, [textInput?.id])
+    useEffect(() => {
+        return () => {
+            console.log("LEAVING BOARD → saving thumbnail");
+            saveThumbnail();
+        };
+    }, [location.pathname]);
     useEffect(() => {
         const handleOpenTextEditor = (e) => {
             const stroke = e.detail
@@ -367,7 +440,39 @@ const Board = () => {
             window.removeEventListener("open-text-editor", handleOpenTextEditor)
         }
     }, [])
+    // useEffect(() => {
+    //     return () => {
+    //         saveThumbnail();
+    //     };
+    // }, []);
+    useEffect(() => {
+        const handleBeforeUnload = () => {
+            const thumbnail = generateThumbnail();
+
+            if (!thumbnail) return;
+
+            const blob = new Blob([JSON.stringify({ thumbnail })], {
+            type: "application/json",
+            });
+
+            navigator.sendBeacon(`http://localhost:5000/api/boards/${id}/thumbnail`, blob);
+            };
+
+        window.addEventListener("beforeunload", handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener("beforeunload", handleBeforeUnload);
+        };
+    }, [id]);
+    useEffect(() => {
+    fetch(`http://localhost:5000/api/boards/${id}`)
+        .then(res => res.json())
+        .then(data => {
+        setBoardTitle(data.title)
+        })
+    }, [id])
     const saveTextEdit = () => {
+        console.log("SAVE THUMBNAIL CALLED");
         if (!textInput) return
 
         const index = strokeRef.current.findIndex(s => s.id === textInput.id)
@@ -487,7 +592,7 @@ const Board = () => {
             {/* Room ID */}
             <div className="flex items-center justify-between gap-2">
             <span className="font-medium text-gray-700">
-                Board
+                {boardTitle || "Loading..."}
             </span>
 
             <button
@@ -499,7 +604,7 @@ const Board = () => {
             </div>
 
             <div className="text-gray-500 text-xs break-all">
-            {id}
+            ID: {id}
             </div>
 
             {/* Users */}
