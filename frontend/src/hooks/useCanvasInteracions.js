@@ -53,8 +53,13 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
     // const spacePressRef = useRef(false)
 
     const [isDrawing, setIsDrawing] = useState(false)
-    const updateRemoteCursor  = (userId, x, y) =>{
-        remoteCursorsRef.current[userId] = {x, y}
+    const updateRemoteCursor  = (userId, x, y, username) =>{
+        remoteCursorsRef.current[userId] = { x, y, username, color: getUserColor(userId) }
+        // console.log(username);
+        redraw()
+    }
+    const removeRemoteCursor = (socketId) => {
+        delete remoteCursorsRef.current[socketId]
         redraw()
     }
     const updateCursor = (handle) => {
@@ -178,7 +183,7 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
     const drawRemoteCursor = (ctx, cursor, userId, scale = 1) => {
         ctx.save()
 
-        const color = getUserColor(userId)
+        const color = cursor.color || "#B39CD0"
 
         const x = cursor.x
         const y = cursor.y
@@ -199,8 +204,7 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
 
         ctx.shadowBlur = 0
 
-        // 🔥 label text
-        const name = userId.slice(0, 4)
+        const name = cursor.username || "User"
 
         ctx.font = `${12 / scale}px Arial`
         const textWidth = ctx.measureText(name).width
@@ -438,11 +442,13 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
         const x = (e.clientX - rect.left - offsetXRef.current) / scaleRef.current;
         const y = (e.clientY - rect.top - offsetYRef.current) / scaleRef.current;
         const stroke = currentStrokeRef.current
+        const user = JSON.parse(localStorage.getItem("user"))
         socketRef.current.emit("cursor-move", {
             roomId,
             x,
             y,
-            userId: userIdRef.current
+            userId: userIdRef.current,
+            username: user?.username || "Guest"
         })
 
         if (!isDrawing && tool === "select") {
@@ -1448,5 +1454,6 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
             onMouseLeave: handleMouseUp,
         },
         updateRemoteCursor,
+        removeRemoteCursor
     }
 }

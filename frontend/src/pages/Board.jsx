@@ -157,7 +157,7 @@ const Board = () => {
     }
     const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef
         ,getSelectionGroupState, offsetYRef, handlers,bringForward, sendBackward,
-         groupSelectedStrokes, ungroupSelectedStrokes,updateRemoteCursor 
+         groupSelectedStrokes, ungroupSelectedStrokes,updateRemoteCursor, removeRemoteCursor
 
     } = useCanvasInteractions(
         tool,
@@ -207,10 +207,11 @@ const Board = () => {
         socketRef.current.on("room-users",(usersList) => {
             setUsers(usersList)
         })
-
+        const user = JSON.parse(localStorage.getItem("user"))
         socketRef.current.emit("join-room", {
             roomId: id,
-            userId: userIdRef.current
+            userId: userIdRef.current,
+            username: user?.username || "Guest"
         })
         socketRef.current.on("stroke-complete", (stroke)=>{
             strokeRef.current.push(stroke)
@@ -229,12 +230,17 @@ const Board = () => {
                 redraw()
             }
         })
-        socketRef.current.on("cursor-update", ({x, y, userId})=>{
-            updateRemoteCursor(userId, x,y)
+        
+        socketRef.current.on("cursor-update", ({x, y, socketId, username})=>{
+            updateRemoteCursor(socketId, x,y,username)
         })
         socketRef.current.on("strokes-add-bulk", (newStrokes) => {
             strokeRef.current.push(...newStrokes)
             drawGrid()
+            redraw()
+        })
+        socketRef.current.on("user-disconnected", (socketId) => {
+            removeRemoteCursor(socketId)
             redraw()
         })
         socketRef.current.on("strokes-move", (updatedStrokes) => {
@@ -603,10 +609,6 @@ const Board = () => {
             </button>
             </div>
 
-            <div className="text-gray-500 text-xs break-all">
-            ID: {id}
-            </div>
-
             {/* Users */}
             <div className="text-gray-500 text-xs">
             {users.length} member{users.length !== 1 ? "s" : ""}
@@ -617,9 +619,11 @@ const Board = () => {
             {users.map(u => (
                 <div
                 key={u.socketId}
-                className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs"
+                    className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs"
+                    title={u.username}
                 >
-                {u.userId.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase()}
+                    {u.username?.slice(0, 2).toUpperCase()}
+                    
                 </div>
             ))}
             </div>

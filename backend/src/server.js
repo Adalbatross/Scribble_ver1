@@ -64,7 +64,7 @@ const scheduleSave = (roomId, boardId) => {
 io.on("connection", (socket) => {
     console.log("User connected:", socket.id)
 
-    socket.on("join-room",  async ({roomId, userId}) => {
+    socket.on("join-room",  async ({roomId, userId, username}) => {
         socket.join(roomId)
         socket.data.roomId = roomId
         socket.data.userId = userId
@@ -82,13 +82,14 @@ io.on("connection", (socket) => {
 
             rooms[roomId] = strokes.map(s => ({
                 ...s,
-                id: s.strokeId   // 🔥 CRITICAL FIX
+                id: s.strokeId   
             }))
         }
         if(!roomUsers[roomId]) roomUsers[roomId] = []
         roomUsers[roomId].push({
             socketId: socket.id,
-            userId
+            userId,
+            username
         })
         io.to(roomId).emit("room-users", roomUsers[roomId])
         if(!roomRedo[roomId]) roomRedo[roomId] = []
@@ -281,11 +282,12 @@ io.on("connection", (socket) => {
 
         socket.broadcast.to(roomId).emit("strokes-add-bulk", normalizedStrokes)
     })
-    socket.on("cursor-move", ({roomId, x, y, userId}) => {
+    socket.on("cursor-move", ({roomId, x, y, userId, username}) => {
         socket.to(roomId).emit("cursor-update", {
             x,
             y,
-            userId
+            socketId: socket.id,
+            username
         })
     })
 
@@ -297,6 +299,8 @@ io.on("connection", (socket) => {
             u => u.socketId !== socket.id 
         )
         io.to(roomId).emit("room-users", roomUsers[roomId])
+
+        io.to(roomId).emit("user-disconnected", socket.id)
         
         if(saveTimer[roomId]){
             clearTimeout(saveTimer[roomId])
