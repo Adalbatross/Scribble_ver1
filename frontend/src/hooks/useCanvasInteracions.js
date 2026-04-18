@@ -1210,12 +1210,6 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
             if (cloned.tool === "rect" && cloned.center) {
                 cloned.center.x += OFFSET
                 cloned.center.y += OFFSET
-
-                // keep points in sync
-                cloned.points = cloned.points.map(p => ({
-                    x: p.x + OFFSET,
-                    y: p.y + OFFSET
-                }))
             } 
             else {
                 cloned.points = cloned.points.map(p => ({
@@ -1275,19 +1269,13 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
             if (cloned.tool === "rect" && cloned.center) {
                 cloned.center.x += OFFSET
                 cloned.center.y += OFFSET
-
-                // keep points in sync
-                cloned.points = cloned.points.map(p => ({
-                    x: p.x + OFFSET,
-                    y: p.y + OFFSET
-                }))
             } 
             else {
                 cloned.points = cloned.points.map(p => ({
                     x: p.x + OFFSET,
                     y: p.y + OFFSET
                 }))
-            }
+            } 
 
             return cloned
         })

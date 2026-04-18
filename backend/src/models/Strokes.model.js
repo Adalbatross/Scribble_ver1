@@ -1,5 +1,8 @@
 const mongoose = require("mongoose")
-
+const PointSchema = new mongoose.Schema({
+    x: Number,
+    y: Number
+}, {_id: false})
 const StrokeSchema = new mongoose.Schema({
     boardId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -23,7 +26,17 @@ const StrokeSchema = new mongoose.Schema({
     rotation: Number,
     groupId: String,
 
-    points: [{ x: Number, y: Number }]
+    points: [PointSchema], 
+
+    center: {
+        x: Number,
+        y: Number
+    },
+    rectSize: {
+        width: Number,
+        height: Number
+    },
+    text: String
 
 }, { timestamps: true })
 

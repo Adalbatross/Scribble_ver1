@@ -26,14 +26,17 @@ const Board = () => {
     const editorRef= useRef(null)
     const isEditingRef = useRef(false)
     const location = useLocation();
+    const dropdownRef = useRef(null)
     const [copied, setCopied] = useState(false)
     const [users, setUsers] = useState([])
+    const [showMembers, setShowMembers] = useState(false)
     const [, setSelectionVersion] = useState(0)
     const [isToolLocked, setisToolLocked] = useState(false)
     const [strokeStyle, setStrokeStyle] = useState("solid")
     const [fillColor, setFillColor] = useState(null)
     const [strokeOpacity, setStrokeOpacity] = useState(1)
     const [boardTitle, setBoardTitle] = useState("")
+    const [showShareModal, setShowShareModal] = useState(false)
     if(! userIdRef.current){
         const existing = localStorage.getItem("scribble-user-id")
         if(existing){
@@ -542,6 +545,35 @@ const Board = () => {
         editorLineHeight,
         editorLines.length * editorLineHeight
     )
+    const handleExport = () => {
+        const canvas = canvasRef.current
+
+        if (!canvas) {
+            console.log("No canvas Found");
+            return 
+        }
+
+        const dataURL = canvas.toDataURL("image/png")
+
+        const link = document.createElement("a")
+        link.href = dataURL
+        link.download = `board-${id}.png`
+
+        link.click()
+    }
+    useEffect(() => {
+        const handleClick = (e) => {
+            if (!dropdownRef.current) return
+
+            if (!dropdownRef.current.contains(e.target)) {
+                setShowMembers(false)
+            }
+        }
+
+        window.addEventListener("click", handleClick)
+        return () => window.removeEventListener("click", handleClick)
+    }, [])
+    const shareLink = `${window.location.origin}/board/${id}`
     
 
 
@@ -551,7 +583,7 @@ const Board = () => {
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 ">
 
         {/* Toolbar */}
-        <div className="flex items-center gap-2 bg-white shadow-md rounded-xl px-4 py-2 border">
+        <div className="flex items-center gap-2 bg-white shadow-md rounded-xl px-4 py-2  border border-gray-400/60">
             <Toolbar 
             tool={tool}
             setTool={setTool}
@@ -571,64 +603,96 @@ const Board = () => {
         onMouseDown={(e) => e.stopPropagation()}
         onMouseMove={(e) => e.stopPropagation()}
         >
-        <ToolOptionsPanel
-            tool={tool}
-            color={color}
-            setColor={setColor}
-            brushSize={brushSize}
-            setBrushSize={setBrushSize}
-            onBringForward={bringForward}
-            onSendBackward={sendBackward}
-            onGroup={groupSelectedStrokes}
-            onUngroup={ungroupSelectedStrokes}
-            canGroup = {canGroup}
-            canUngroup = {canUngroup}
-            strokeStyle = {strokeStyle}
-            setStrokeStyle = {setStrokeStyle}
-            fillColor={fillColor}
-            setFillColor = {setFillColor}
-            setStrokeOpacity={setStrokeOpacity}
-            strokeOpacity={strokeOpacity}
-        />
+            <ToolOptionsPanel
+                tool={tool}
+                color={color}
+                setColor={setColor}
+                brushSize={brushSize}
+                setBrushSize={setBrushSize}
+                onBringForward={bringForward}
+                onSendBackward={sendBackward}
+                onGroup={groupSelectedStrokes}
+                onUngroup={ungroupSelectedStrokes}
+                canGroup = {canGroup}
+                canUngroup = {canUngroup}
+                strokeStyle = {strokeStyle}
+                setStrokeStyle = {setStrokeStyle}
+                fillColor={fillColor}
+                setFillColor = {setFillColor}
+                setStrokeOpacity={setStrokeOpacity}
+                strokeOpacity={strokeOpacity}
+            />
         </div>
 
-        <div className="absolute top-4 right-4 z-20">
-        <div className="bg-white shadow-md rounded-xl px-4 py-3 border text-sm flex flex-col gap-2">
+        <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
 
-            {/* Room ID */}
-            <div className="flex items-center justify-between gap-2">
-            <span className="font-medium text-gray-700">
+        {/* BOARD NAME CARD */}
+        <div  ref = {dropdownRef} className="relative bg-white shadow-md rounded-xl px-2.5 py-2 border border-gray-300/80 h-12 flex items-center gap-2">
+
+            {/* BOARD NAME */}
+            <span className="font-medium text-gray-700 text-xl">
                 {boardTitle || "Loading..."}
             </span>
 
-            <button
-                onClick={handleCopy}
-                className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200 transition"
-            >
-                {copied ? "Copied!" : "Copy"}
-            </button>
-            </div>
-
-            {/* Users */}
-            <div className="text-gray-500 text-xs">
-            {users.length} member{users.length !== 1 ? "s" : ""}
-            </div>
-
-            {/* Avatars */}
-            <div className="flex gap-1">
-            {users.map(u => (
-                <div
-                key={u.socketId}
-                    className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs"
-                    title={u.username}
+            {/* THREE DOTS (ONLY IF >1 USERS) */}
+            {users.length > 1 && (
+                <button
+                    onClick={() => setShowMembers(prev => !prev)}
+                    className="p-1 rounded hover:bg-primary/20 transition"
                 >
-                    {u.username?.slice(0, 2).toUpperCase()}
-                    
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="w-6 h-6 text-gray-600"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                    >
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M12 6h.01M12 12h.01M12 18h.01"
+                        />
+                    </svg>
+                </button>
+            )}
+
+            {/* MEMBER COUNT BADGE */}
+            {users.length >= 1 && (
+                <div className="absolute -bottom-2 -right-2 bg-primary text-white text-[14px] w-6 h-6 flex items-center justify-center rounded-full shadow">
+                    {users.length}
                 </div>
-            ))}
-            </div>
+            )}
 
         </div>
+        { users.length > 1 && (
+            <div  className={`absolute top-full left-1/3 -translate-x-1/3 mt-2 
+            bg-white border border-gray-300/60 rounded-lg shadow-sm p-2 flex gap-1 z-50
+            transition-all duration-200 ease-out
+            ${showMembers ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"}
+            `}>
+
+                {users.map(u => (
+                    <div
+                        key={u.socketId}
+                        className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center text-xs"
+                        title={u.username}
+                    >
+                        {u.username?.slice(0, 2).toUpperCase()}
+                    </div>
+                ))}
+
+            </div>
+        )}
+
+        {/* SHARE BUTTON (OUTSIDE) */}
+        <button
+            onClick={()=>{setShowShareModal(true)}}
+            className="h-12 px-4 bg-primary text-xl text-white rounded-xl shadow-md hover:bg-primaryDark transition flex items-center"
+        >
+            Share +
+        </button>
+
         </div>
         
         {/* Canvas Area */}
@@ -746,6 +810,57 @@ const Board = () => {
                 />
             </div>
         )}
+        {showShareModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+
+                {/* BACKDROP */}
+                <div
+                className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+                onClick={() => setShowShareModal(false)}
+                />
+
+                {/* MODAL */}
+                <div className="relative bg-white rounded-xl shadow-xl p-6 w-100">
+
+                <h2 className="text-lg font-semibold mb-3">
+                    Invite to Board
+                </h2>
+
+                <p className="text-sm text-gray-500 mb-4">
+                    Share this link to collaborate
+                </p>
+
+                {/* INPUT */}
+                <input
+                    value={shareLink}
+                    readOnly
+                    className="w-full border border-gray-200/60 rounded-md p-2 text-sm mb-3"
+                />
+
+                {/* ACTIONS */}
+                <div className="flex justify-end gap-2">
+
+                    <button
+                    onClick={() => setShowShareModal(false)}
+                    className="px-3 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200"
+                    >
+                    Close
+                    </button>
+
+                    <button
+                    onClick={() => {
+                        navigator.clipboard.writeText(shareLink)
+                    }}
+                    className="px-3 py-1 text-sm bg-primary text-white rounded hover:bg-primaryDark"
+                    >
+                    Copy Link
+                    </button>
+
+                </div>
+
+                </div>
+            </div>
+            )}
 
     </div>
   )

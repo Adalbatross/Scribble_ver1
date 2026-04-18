@@ -18,8 +18,8 @@ const ToolButton = ({ active, onClick, children, title }) => (
   onClick={onClick}
   className={`w-10 h-10 flex items-center justify-center rounded-lg transition
     ${active 
-    ? "bg-blue-100 text-blue-600 shadow-sm" 
-    : "text-gray-600 hover:bg-gray-100"}
+    ? "bg-primary/70 text-white shadow-sm" 
+    : "text-gray-600 hover:bg-primary/20"}
     `}
     >
     {children}
