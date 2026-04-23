@@ -49,6 +49,7 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
     const isPanningRef = useRef(false)
     const panStartRef = useRef({ x: 0, y: 0 })
     const remoteCursorsRef = useRef({})
+    const darkModeRef = useRef(darkMode)
     // const lastSentRef = useRef(0)
     // const spacePressRef = useRef(false)
 
@@ -256,7 +257,7 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
                 ctx.globalAlpha = 0.8
             }
 
-            drawStroke(ctx, stroke, scaleRef.current, darkMode)
+            drawStroke(ctx, stroke, scaleRef.current, darkModeRef.current)
             if(stroke.id === hoveredIdRef.current && tool === "select"){
                 drawHoverOutline(ctx, stroke, scaleRef.current)
             }
@@ -314,7 +315,7 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
             }
         }
         if(currentStrokeRef.current){
-            drawStroke(ctx, currentStrokeRef.current, scaleRef.current, darkMode)
+            drawStroke(ctx, currentStrokeRef.current, scaleRef.current, darkModeRef.current)
         }
         if (isMarqueeSelectingRef.current && marqueeStartRef.current && marqueeCurrentRef.current) {
             const start = marqueeStartRef.current
@@ -789,6 +790,9 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
         stroke.points.push({x,y})
 
     }
+    useEffect(() => {
+        darkModeRef.current = darkMode
+    }, [darkMode])
 
     // handle mouse down hook
 

@@ -4,11 +4,15 @@ import { useState } from 'react'
 import { useRef } from 'react'
 import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
+
 import Toolbar from '../components/Toolbar'
 import { useCanvasInteractions } from '../hooks/useCanvasInteracions'
 import ToolOptionsPanel from '../components/ToolOptionsPanel'
 import { useLocation } from "react-router-dom";
 import jsPDF from "jspdf"
+import ToggleSwitch from '../components/ToggleSwitch'
+import { DarkModeIcon } from '../icons/DarkModeIcon'
+import { GridIcon } from '../icons/GridIcon'
 const Board = () => {
     const MIN_ZOOM = 0.1
     const MAX_ZOOM = 10
@@ -40,6 +44,7 @@ const Board = () => {
     const [darkMode, setDarkMode] = useState(() => {
         return localStorage.getItem("dark-mode") === "true"
     })
+    const darkModeRef = useRef(darkMode)
     const [showGrid, setShowGrid] = useState(() => {
         const saved = localStorage.getItem("show-grid")
         return saved === null ? true : saved === "true"
@@ -150,8 +155,8 @@ const Board = () => {
         for (let x = firstX; x < endX; x += gridSize) {
             ctx.beginPath()
             ctx.strokeStyle = (Math.round(x / gridSize) % 10 === 0)
-                ? (darkMode ? "#444" : "#cfcfcf")
-                : (darkMode ? "#2a2a2a" : "#e8e8e8")
+                ? (darkModeRef.current ? "#444" : "#cfcfcf")
+                : (darkModeRef.current ? "#2a2a2a" : "#e8e8e8")
 
             ctx.lineWidth = (Math.round(x / gridSize) % 10 === 0) ? 1.5 : 1
 
@@ -163,8 +168,8 @@ const Board = () => {
         for (let y = firstY; y < endY; y += gridSize) {
             ctx.beginPath()
             ctx.strokeStyle = (Math.round(y / gridSize) % 10 === 0)
-                ? (darkMode ? "#444" : "#cfcfcf")
-                : (darkMode ? "#2a2a2a" : "#e8e8e8")
+                ? (darkModeRef.current ? "#444" : "#cfcfcf")
+                : (darkModeRef.current ? "#2a2a2a" : "#e8e8e8")
 
             ctx.lineWidth = (Math.round(y / gridSize) % 10 === 0) ? 1.5 : 1
 
@@ -467,11 +472,9 @@ const Board = () => {
             window.removeEventListener("open-text-editor", handleOpenTextEditor)
         }
     }, [])
-    // useEffect(() => {
-    //     return () => {
-    //         saveThumbnail();
-    //     };
-    // }, []);
+    useEffect(() => {
+    darkModeRef.current = darkMode
+    }, [darkMode])
     useEffect(() => {
         const handleBeforeUnload = () => {
             const thumbnail = generateThumbnail();
@@ -647,6 +650,7 @@ const Board = () => {
     return () => window.removeEventListener("click", handleClick)
     }, [])
 
+DarkModeIcon
 
 return (
     <div className={`h-screen w-screen relative overflow-hidden ${
@@ -711,13 +715,15 @@ return (
         {/* BOARD NAME CARD */}
         <div  ref = {dropdownRef} className={`relative shadow-md rounded-xl px-2.5 py-2 border h-12 flex items-center gap-2
             ${darkMode
-                ? "bg-[#2a2a2a] border-gray-700 text-white"
+                ? "bg-[#2a2a2a] border-gray-700 text-gray-200"
                 : "bg-white border-gray-300/80 text-gray-700"
             }
         `}>
 
             {/* BOARD NAME */}
-            <span className="font-medium text-gray-700 text-xl">
+            <span className={`font-medium text-xl ${
+            darkMode ? "text-gray-200" : "text-gray-700"
+            }`}>
                 {boardTitle || "Loading..."}
             </span>
 
@@ -786,11 +792,16 @@ return (
 
             <button
                 onClick={() => setShowMenu(prev => !prev)}
-                className="h-13 w-10 flex items-center justify-center bg-white border border-gray-200/60 rounded-xl shadow-sm hover:bg-gray-50 transition"
+                className={`h-13 w-10 flex items-center justify-center rounded-xl shadow-sm transition
+                ${darkMode
+                    ? "bg-[#2a2a2a] border border-gray-700 hover:bg-white/10"
+                    : "bg-white border border-gray-200/60 hover:bg-gray-50"
+                }
+                `}
             >
                 <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="w-5 h-5 text-black"
+                className={`w-5 h-5 ${darkMode ? "text-gray-200" : "text-black"}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -801,14 +812,24 @@ return (
             </button>
         </div>
         {showMenu && (
-            <div className="absolute right-0 mt-37 w-35 bg-white border border-gray-200/60 rounded-xl shadow-lg z-50">
+            <div className={`absolute right-0 mt-57 w-35 rounded-xl shadow-lg z-50
+            ${darkMode
+                ? "bg-[#2a2a2a] border border-gray-700 text-gray-200"
+                : "bg-white border border-gray-200/60"
+            }
+            `}>
 
                 <button
                 onClick={()=>{
                     handleExportPNG()
                     setShowMenu(false)
                 }}
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition"
+                className={`w-full text-left px-4 py-2 text-sm transition
+                ${darkMode
+                    ? "text-gray-200 hover:bg-white/10"
+                    : "hover:bg-gray-100"
+                }
+                `}
                 >
                 Export as PNG
                 </button>
@@ -818,32 +839,49 @@ return (
                     handleExportPDF()
                     setShowMenu(false)
                 }}
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition"
+                className={`w-full text-left px-4 py-2 text-sm transition
+                ${darkMode
+                    ? "text-gray-200 hover:bg-white/10"
+                    : "hover:bg-gray-100"
+                }
+                `}
                 >
                 Export as PDF
                 </button>
-                <button
-                onClick={() => {
-                    setDarkMode(prev => {
-                    localStorage.setItem("dark-mode", !prev)
-                    return !prev
-                    })
-                }}
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                <div
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center justify-between px-4 py-2"
                 >
-                {darkMode ? "☀️" : "🌙"}
-                </button>
-                <button
-                onClick={() => {
-                    setShowGrid(prev => {
-                    localStorage.setItem("show-grid", !prev)
-                    return !prev
-                    })
-                }}
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                >
-                {showGrid ? "Grid ON" : "Grid OFF"}
-                </button>
+                <div className="flex items-center gap-2 text-sm">
+                    <DarkModeIcon darkMode={darkMode} />
+                    {darkMode ? "Light" : "Dark"}
+                </div>
+
+                <ToggleSwitch
+                    enabled={darkMode}
+                    onChange={(val) => {
+                    setDarkMode(val)
+                    localStorage.setItem("dark-mode", val)
+                    }}
+                />
+                </div>
+                <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center justify-between px-4 py-2"
+                    >
+                    <div className="flex items-center gap-2 text-sm">
+                        <GridIcon />
+                        Grid
+                    </div>
+
+                    <ToggleSwitch
+                        enabled={showGrid}
+                        onChange={(val) => {
+                        setShowGrid(val)
+                        localStorage.setItem("show-grid", val)
+                        }}
+                    />
+                </div>
 
             </div>
         )}
@@ -978,7 +1016,12 @@ return (
                 />
 
                 {/* MODAL */}
-                <div className="relative bg-white rounded-xl shadow-xl p-6 w-100">
+                <div className={`relative rounded-xl shadow-xl p-6 w-100
+                ${darkMode
+                    ? "bg-[#2a2a2a] text-gray-200"
+                    : "bg-white"
+                }
+                `}>
 
                 <h2 className="text-lg font-semibold mb-3">
                     Invite to Board
@@ -992,7 +1035,12 @@ return (
                 <input
                     value={shareLink}
                     readOnly
-                    className="w-full border border-gray-200/60 rounded-md p-2 text-sm mb-3"
+                    className={`w-full rounded-md p-2 text-sm mb-3 border
+                    ${darkMode
+                        ? "bg-[#1e1e1e] border-gray-700 text-gray-200"
+                        : "border-gray-200/60"
+                    }
+                    `}
                 />
 
                 {/* ACTIONS */}
@@ -1000,7 +1048,12 @@ return (
 
                     <button
                     onClick={() => setShowShareModal(false)}
-                    className="px-3 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200"
+                    className={`px-3 py-1 text-sm rounded
+                    ${darkMode
+                        ? "bg-gray-700 hover:bg-gray-600 text-white"
+                        : "bg-gray-100 hover:bg-gray-200"
+                    }
+                    `}
                     >
                     Close
                     </button>
