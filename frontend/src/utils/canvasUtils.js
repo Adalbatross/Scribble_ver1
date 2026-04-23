@@ -13,12 +13,18 @@ export const applyStrokeOpacity = (color, opacity = 1) => {
 
     return color
 }
-export const drawStroke = (ctx, stroke, scale) =>{
+export const drawStroke = (ctx, stroke, scale, darkMode) =>{
         if (!stroke.points.length) return
         ctx.lineWidth = stroke.width
         ctx.lineCap = stroke.style === "dotted" ? "round" : "butt"
+        let renderColor = stroke.color
+
+        if (darkMode && (stroke.color === "black" || stroke.color === "#000000")) {
+            renderColor = "#ffffff"
+        }
+
         ctx.strokeStyle = applyStrokeOpacity(
-            stroke.color,
+            renderColor,
             stroke.opacity ?? 1
         )
         const base = stroke.width || 1
@@ -137,7 +143,13 @@ export const drawStroke = (ctx, stroke, scale) =>{
             ctx.save()
             ctx.globalCompositeOperation = "source-over"
             ctx.font = `${fontSize}px Arial`
-            ctx.fillStyle = stroke.color
+            let textColor = stroke.color
+
+            if (darkMode && (stroke.color === "black" || stroke.color === "#000000")) {
+                textColor = "#ffffff"
+            }
+
+            ctx.fillStyle = textColor
             ctx.textBaseline = "top"
 
             lines.forEach((line, index) => {

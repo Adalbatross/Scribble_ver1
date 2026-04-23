@@ -24,40 +24,49 @@ function Home() {
   const [modalValue, setModalValue] = useState("");
   const [selectedBoard, setSelectedBoard] = useState(null);
 
-  
-  // const fetchBoards = async () => {
-  //   const token = localStorage.getItem("token");
-  //   if (!token) return;
-  //   try {
-  //     const res = await fetch("http://localhost:5000/api/boards/my", {
-  //       headers: { Authorization: `Bearer ${token}` },
-  //     });
-  //     const data = await res.json();
-  //     setBoards(data);
-  //   } catch (err) {
-  //     console.error("Error fetching boards:", err);
-  //   }
-  // };
   useEffect(() => {
-      const loadBoards = async () => {
-        const token = localStorage.getItem("token");
-        if (!token) return;
+    const loadBoards = async () => {
+      const token = localStorage.getItem("token");
 
-        try {
-          const res = await fetch("http://localhost:5000/api/boards/my", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+      // 👉 No token → just show empty homepage
+      if (!token) {
+        setBoards([]);
+        return;
+      }
 
-          const data = await res.json();
-          setBoards(data);
-          console.log(boards);
-          
-        } catch (err) {
-          console.error("Error fetching boards:", err);
+      try {
+        const res = await fetch("http://localhost:5000/api/boards/my", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) {
+          console.warn("Auth failed, clearing session");
+
+          // clear invalid token
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+
+          setBoards([]); 
+          return;
         }
-      };
 
-      loadBoards();
+        const data = await res.json();
+
+        if (Array.isArray(data)) {
+          setBoards(data);
+        } else {
+          setBoards([]);
+        }
+
+      } catch (err) {
+        console.error("Error fetching boards:", err);
+        setBoards([]);
+      }
+    };
+
+    loadBoards();
   }, []);
   
   const handleCreate = async () => {
@@ -236,7 +245,7 @@ function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {boards.map((board) => (
               <div
-                key={board._id}
+                key={board.roomId}
                 className="group bg-white/80 backdrop-blur-sm border border-slate-200 rounded-[2rem] p-5 hover:border-primary hover:shadow-[0_20px_40px_rgba(0,0,0,0.04)] transition-all cursor-pointer relative"
                 onClick={() => navigate(`/board/${board.roomId}`)}
               >

@@ -8,7 +8,7 @@ import Toolbar from '../components/Toolbar'
 import { useCanvasInteractions } from '../hooks/useCanvasInteracions'
 import ToolOptionsPanel from '../components/ToolOptionsPanel'
 import { useLocation } from "react-router-dom";
-
+import jsPDF from "jspdf"
 const Board = () => {
     const MIN_ZOOM = 0.1
     const MAX_ZOOM = 10
@@ -27,7 +27,6 @@ const Board = () => {
     const isEditingRef = useRef(false)
     const location = useLocation();
     const dropdownRef = useRef(null)
-    const [copied, setCopied] = useState(false)
     const [users, setUsers] = useState([])
     const [showMembers, setShowMembers] = useState(false)
     const [, setSelectionVersion] = useState(0)
@@ -35,8 +34,16 @@ const Board = () => {
     const [strokeStyle, setStrokeStyle] = useState("solid")
     const [fillColor, setFillColor] = useState(null)
     const [strokeOpacity, setStrokeOpacity] = useState(1)
+    const [showMenu, setShowMenu] = useState(false)
     const [boardTitle, setBoardTitle] = useState("")
     const [showShareModal, setShowShareModal] = useState(false)
+    const [darkMode, setDarkMode] = useState(() => {
+        return localStorage.getItem("dark-mode") === "true"
+    })
+    const [showGrid, setShowGrid] = useState(() => {
+        const saved = localStorage.getItem("show-grid")
+        return saved === null ? true : saved === "true"
+    })
     if(! userIdRef.current){
         const existing = localStorage.getItem("scribble-user-id")
         if(existing){
@@ -57,14 +64,15 @@ const Board = () => {
         // small preview size
         tempCanvas.width = 300;
         tempCanvas.height = 200;
-
+        
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-
+        
         ctx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height);
-
+        
         return tempCanvas.toDataURL("image/jpeg", 0.7);
     };
+    const showGridRef = useRef(showGrid)
     const saveThumbnail = async () => {
         try {
             const thumbnail = lastThumbnailRef.current;
@@ -87,81 +95,90 @@ const Board = () => {
             console.error("Thumbnail error:", err);
         }
     };
-    const handleCopy = async () => {
-    const url = `${window.location.origin}/board/${id}`
+    // const handleCopy = async () => {
+    // const url = `${window.location.origin}/board/${id}`
 
-    await navigator.clipboard.writeText(url)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-    }
+    // await navigator.clipboard.writeText(url)
+    // setCopied(true)
+    // setTimeout(() => setCopied(false), 1500)
+    // }
     
-    const drawGrid = ()=> {
-        const canvas = gridCanvasRef.current
+    function drawGrid() {
+        const canvas = gridCanvasRef?.current
+        if (!canvas) return
+
         const ctx = canvas.getContext("2d")
-        ctx.clearRect(0,0, canvas.width, canvas.height)
-        const width = canvas.width    
+
+        // always clear first
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+        // if grid OFF → just clear and stop
+        if (!showGridRef.current) {
+            const canvas = gridCanvasRef?.current
+            if (!canvas) return
+            const ctx = canvas.getContext("2d")
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            return
+        }
+
+        const width = canvas.width
         const height = canvas.height
-        
+
         const scale = scaleRef.current
         const offsetX = offsetXRef.current
         const offsetY = offsetYRef.current
-        
-        // const baseGridSize = 50
-        
+
         let gridSize = baseGridSize
-        if (gridSize * scale < 8) gridSize *= 2 
-        if(scale< 0.5) gridSize *=4
-        else if (scale<1) gridSize *= 2
-        else if (scale>2) gridSize /= 2
+
+        if (gridSize * scale < 8) gridSize *= 2
+        if (scale < 0.5) gridSize *= 4
+        else if (scale < 1) gridSize *= 2
+        else if (scale > 2) gridSize /= 2
+
         ctx.save()
-        
         ctx.translate(offsetX, offsetY)
         ctx.scale(scale, scale)
-        
+
         const startX = -offsetX / scale
         const startY = -offsetY / scale
-        const endX = startX+ width / scale
-        const endY = startY+ height / scale
-        
-        const firstX  = Math.floor(startX/gridSize) * gridSize
-        const firstY  = Math.floor(startY/gridSize) * gridSize
-        
-        for(let x= firstX; x< endX; x+=gridSize){
+        const endX = startX + width / scale
+        const endY = startY + height / scale
+
+        const firstX = Math.floor(startX / gridSize) * gridSize
+        const firstY = Math.floor(startY / gridSize) * gridSize
+
+        for (let x = firstX; x < endX; x += gridSize) {
             ctx.beginPath()
-            if (Math.round(x / gridSize) % 10 === 0){
-                ctx.strokeStyle = '#cfcfcf'
-                ctx.lineWidth = 1.5
-            }else{
-                ctx.strokeStyle = '#e8e8e8'
-                ctx.lineWidth = 1
-            }
-            
-            ctx.moveTo(Math.round(x) +0.5 ,startY)
-            ctx.lineTo(Math.round(x) + 0.5,endY)
+            ctx.strokeStyle = (Math.round(x / gridSize) % 10 === 0)
+                ? (darkMode ? "#444" : "#cfcfcf")
+                : (darkMode ? "#2a2a2a" : "#e8e8e8")
+
+            ctx.lineWidth = (Math.round(x / gridSize) % 10 === 0) ? 1.5 : 1
+
+            ctx.moveTo(Math.round(x) + 0.5, startY)
+            ctx.lineTo(Math.round(x) + 0.5, endY)
             ctx.stroke()
         }
-        for(let y= firstY; y< endY; y+=gridSize){
+
+        for (let y = firstY; y < endY; y += gridSize) {
             ctx.beginPath()
-            if (Math.round(y / gridSize) % 10 === 0){
-                ctx.strokeStyle = '#cfcfcf'
-                ctx.lineWidth = 1.5
-            }else{
-                ctx.strokeStyle = '#e8e8e8'
-                ctx.lineWidth = 1
-            }
-            
-            ctx.moveTo(startX,Math.round(y)+0.5)
-            ctx.lineTo(endX, Math.round(y)+0.5)
+            ctx.strokeStyle = (Math.round(y / gridSize) % 10 === 0)
+                ? (darkMode ? "#444" : "#cfcfcf")
+                : (darkMode ? "#2a2a2a" : "#e8e8e8")
+
+            ctx.lineWidth = (Math.round(y / gridSize) % 10 === 0) ? 1.5 : 1
+
+            ctx.moveTo(startX, Math.round(y) + 0.5)
+            ctx.lineTo(endX, Math.round(y) + 0.5)
             ctx.stroke()
         }
-        
-        ctx.restore() 
-        
+
+        ctx.restore()
     }
     const {canvasRef , gridCanvasRef,redraw, strokeRef,scaleRef, offsetXRef
         ,getSelectionGroupState, offsetYRef, handlers,bringForward, sendBackward,
-         groupSelectedStrokes, ungroupSelectedStrokes,updateRemoteCursor, removeRemoteCursor
-
+        groupSelectedStrokes, ungroupSelectedStrokes,updateRemoteCursor, removeRemoteCursor
+        
     } = useCanvasInteractions(
         tool,
         setTool,
@@ -173,6 +190,7 @@ const Board = () => {
         strokeOpacity,
         socketRef,
         drawGrid,
+        darkMode,
         spacePressRef,
         id,
         userIdRef,
@@ -534,6 +552,9 @@ const Board = () => {
         drawGrid()
         redraw()
     }, [textInput])
+    useEffect(() => {
+        showGridRef.current = showGrid
+    }, [showGrid])
     const editorLines = (textInput?.value || "").split("\n")
     const scaledFontSize = (textInput?.fontSize || 16) * scaleRef.current
     const editorLineHeight = scaledFontSize * 1.2
@@ -545,21 +566,60 @@ const Board = () => {
         editorLineHeight,
         editorLines.length * editorLineHeight
     )
-    const handleExport = () => {
+    useEffect(() => {
+        drawGrid()
+        redraw()
+    }, [showGrid])
+    useEffect(() => {
+        drawGrid()
+        redraw()
+    }, [darkMode])
+
+    const handleExportPNG = () => {
         const canvas = canvasRef.current
 
         if (!canvas) {
-            console.log("No canvas Found");
-            return 
+            console.error("Canvas not found")
+            return
         }
 
-        const dataURL = canvas.toDataURL("image/png")
+        
+        const scale = 2 
+
+        const exportCanvas = document.createElement("canvas")
+        exportCanvas.width = canvas.width * scale
+        exportCanvas.height = canvas.height * scale
+
+        const ctx = exportCanvas.getContext("2d")
+
+        
+        ctx.fillStyle = "#ffffff"
+        ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height)
+
+        ctx.scale(scale, scale)
+        ctx.drawImage(canvas, 0, 0)
 
         const link = document.createElement("a")
-        link.href = dataURL
-        link.download = `board-${id}.png`
+        link.download = `board-${Date.now()}.png`
+        link.href = exportCanvas.toDataURL("image/png")
 
         link.click()
+    }
+    const handleExportPDF = () => {
+        const canvas = canvasRef.current
+        if (!canvas) return
+
+        const imgData = canvas.toDataURL("image/png")
+
+        const pdf = new jsPDF({
+            orientation: "landscape",
+            unit: "px",
+            format: [canvas.width, canvas.height]
+        })
+
+        pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height)
+
+        pdf.save(`board-${Date.now()}.pdf`)
     }
     useEffect(() => {
         const handleClick = (e) => {
@@ -574,16 +634,36 @@ const Board = () => {
         return () => window.removeEventListener("click", handleClick)
     }, [])
     const shareLink = `${window.location.origin}/board/${id}`
-    
+    const menuRef = useRef(null)
+
+    useEffect(() => {
+    const handleClick = (e) => {
+        if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowMenu(false)
+        }
+    }
+
+    window.addEventListener("click", handleClick)
+    return () => window.removeEventListener("click", handleClick)
+    }, [])
 
 
-  return (
-    <div className="h-screen w-screen relative bg-white overflow-hidden">
+return (
+    <div className={`h-screen w-screen relative overflow-hidden ${
+    darkMode ? "bg-[#1e1e1e]" : "bg-white"
+    }`}>
 
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 ">
 
         {/* Toolbar */}
-        <div className="flex items-center gap-2 bg-white shadow-md rounded-xl px-4 py-2  border border-gray-400/60">
+        <div
+        className={`flex items-center gap-2 shadow-md rounded-xl px-4 py-2 border
+            ${darkMode
+            ? "bg-[#2a2a2a] border-gray-700"
+            : "bg-white border-gray-400/60"
+            }
+        `}
+        >
             <Toolbar 
             tool={tool}
             setTool={setTool}
@@ -595,6 +675,7 @@ const Board = () => {
             onRedo={() => socketRef.current.emit("redo")}
             isToolLocked = {isToolLocked}
             setisToolLocked = {setisToolLocked}
+            darkMode = {darkMode}
             />
         </div>
         </div>
@@ -621,13 +702,19 @@ const Board = () => {
                 setFillColor = {setFillColor}
                 setStrokeOpacity={setStrokeOpacity}
                 strokeOpacity={strokeOpacity}
+                darkMode = {darkMode}
             />
         </div>
 
         <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
 
         {/* BOARD NAME CARD */}
-        <div  ref = {dropdownRef} className="relative bg-white shadow-md rounded-xl px-2.5 py-2 border border-gray-300/80 h-12 flex items-center gap-2">
+        <div  ref = {dropdownRef} className={`relative shadow-md rounded-xl px-2.5 py-2 border h-12 flex items-center gap-2
+            ${darkMode
+                ? "bg-[#2a2a2a] border-gray-700 text-white"
+                : "bg-white border-gray-300/80 text-gray-700"
+            }
+        `}>
 
             {/* BOARD NAME */}
             <span className="font-medium text-gray-700 text-xl">
@@ -642,7 +729,7 @@ const Board = () => {
                 >
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
-                        className="w-6 h-6 text-gray-600"
+                        className={`w-6 h-6 ${darkMode ? "text-gray-300" : "text-gray-600"}`}
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -667,8 +754,11 @@ const Board = () => {
         </div>
         { users.length > 1 && (
             <div  className={`absolute top-full left-1/3 -translate-x-1/3 mt-2 
-            bg-white border border-gray-300/60 rounded-lg shadow-sm p-2 flex gap-1 z-50
-            transition-all duration-200 ease-out
+            rounded-lg shadow-sm p-2 flex gap-1 z-50 transition-all duration-200 ease-out
+            ${darkMode
+                ? "bg-[#2a2a2a] border border-gray-700"
+                : "bg-white border border-gray-300/60"
+            }
             ${showMembers ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"}
             `}>
 
@@ -692,11 +782,79 @@ const Board = () => {
         >
             Share +
         </button>
+        <div ref={menuRef} className="relative">
+
+            <button
+                onClick={() => setShowMenu(prev => !prev)}
+                className="h-13 w-10 flex items-center justify-center bg-white border border-gray-200/60 rounded-xl shadow-sm hover:bg-gray-50 transition"
+            >
+                <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-5 h-5 text-black"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6h.01M12 12h.01M12 18h.01" />
+                </svg>
+            </button>
+        </div>
+        {showMenu && (
+            <div className="absolute right-0 mt-37 w-35 bg-white border border-gray-200/60 rounded-xl shadow-lg z-50">
+
+                <button
+                onClick={()=>{
+                    handleExportPNG()
+                    setShowMenu(false)
+                }}
+                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition"
+                >
+                Export as PNG
+                </button>
+
+                <button
+                onClick={()=>{
+                    handleExportPDF()
+                    setShowMenu(false)
+                }}
+                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition"
+                >
+                Export as PDF
+                </button>
+                <button
+                onClick={() => {
+                    setDarkMode(prev => {
+                    localStorage.setItem("dark-mode", !prev)
+                    return !prev
+                    })
+                }}
+                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                >
+                {darkMode ? "☀️" : "🌙"}
+                </button>
+                <button
+                onClick={() => {
+                    setShowGrid(prev => {
+                    localStorage.setItem("show-grid", !prev)
+                    return !prev
+                    })
+                }}
+                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                >
+                {showGrid ? "Grid ON" : "Grid OFF"}
+                </button>
+
+            </div>
+        )}
+        
 
         </div>
         
         {/* Canvas Area */}
-        <div className="absolute inset-0 bg-gray-100">
+        <div className={`absolute inset-0 ${
+            darkMode ? "bg-[#1a1a1a]" : "bg-gray-100"
+        }`}>
             <canvas
             className="absolute inset-0 w-full h-full"
             ref={canvasRef}

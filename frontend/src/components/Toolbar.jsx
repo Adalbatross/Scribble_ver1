@@ -12,16 +12,20 @@ import TextIcon from "../icons/TextIcon"
 import LockIcon from "../icons/LockIcon"
 
 
-const ToolButton = ({ active, onClick, children, title }) => (
+const ToolButton = ({ active, onClick, children, title, darkMode }) => (
   <button
-  title={title}
-  onClick={onClick}
-  className={`w-10 h-10 flex items-center justify-center rounded-lg transition
-    ${active 
-    ? "bg-primary/70 text-white shadow-sm" 
-    : "text-gray-600 hover:bg-primary/20"}
+    title={title}
+    onClick={onClick}
+    className={`w-10 h-10 flex items-center justify-center rounded-lg transition
+      ${
+        active
+          ? "bg-primary/70 text-white shadow-sm"
+          : darkMode
+            ? "text-gray-300 hover:bg-white/10"
+            : "text-gray-600 hover:bg-primary/20"
+      }
     `}
-    >
+  >
     {children}
   </button>
 )
@@ -34,37 +38,38 @@ const COLORS = [
   "#a855f7"
 ]
 
-const Toolbar = ({ tool, setTool, onUndo, onRedo, isToolLocked, setisToolLocked }) => {
+const Toolbar = ({ tool, setTool, onUndo, onRedo, isToolLocked, setisToolLocked, darkMode }) => {
   return (
     <div className="flex items-center gap-2">
-      <ToolButton active={isToolLocked} onClick={()=>{setisToolLocked(prev => !prev)}} title="lock tool" >
+      <ToolButton darkMode={darkMode} active={isToolLocked} onClick={()=>{setisToolLocked(prev => !prev)}} title="lock tool" >
         <LockIcon />
       </ToolButton>
 
-      <ToolButton active={tool === "select"} onClick={() => setTool("select")} >
+      <ToolButton darkMode={darkMode} active={tool === "select"} onClick={() => setTool("select")} >
         <SelectIcon />
       </ToolButton>
 
-      <ToolButton active={tool === "pen"} onClick={() => {setTool("pen")
+      <ToolButton darkMode={darkMode} active={tool === "pen"} onClick={() => {setTool("pen")
         window.dispatchEvent(new Event("clear-selection"))
       }}>
         <PenIcon />
       </ToolButton>
 
 
-      <ToolButton active={tool === "line"} onClick={() => {setTool("line")
+      <ToolButton darkMode={darkMode} active={tool === "line"} onClick={() => {setTool("line")
         window.dispatchEvent(new Event("clear-selection"))
       }}>
         <LineIcon />
       </ToolButton>
 
-      <ToolButton active={tool === "arrow"} onClick={() => {setTool("arrow") 
+      <ToolButton darkMode={darkMode} active={tool === "arrow"} onClick={() => {setTool("arrow") 
         window.dispatchEvent(new Event("clear-selection"))
       }}>
       <ArrowIcon />
       </ToolButton>
       
       <ToolButton
+        darkMode={darkMode}
         active={tool === "rect"}
         onClick={() => {
           setTool("rect")
@@ -74,19 +79,19 @@ const Toolbar = ({ tool, setTool, onUndo, onRedo, isToolLocked, setisToolLocked 
         <RectIcon />
       </ToolButton>
 
-      <ToolButton active={tool === "circle"} onClick={() => {setTool("circle")
+      <ToolButton darkMode={darkMode} active={tool === "circle"} onClick={() => {setTool("circle")
         window.dispatchEvent(new Event("clear-selection"))
       }}>
         <CircleIcon />
       </ToolButton>
 
-      <ToolButton active={tool === "text"} onClick={() => {setTool("text")
+      <ToolButton darkMode={darkMode} active={tool === "text"} onClick={() => {setTool("text")
         // window.dispatchEvent(new Event("clear-selection"))
       }}>
         <TextIcon />
       </ToolButton>
 
-      <ToolButton active={tool === "eraser"} onClick={() => {setTool("eraser")
+      <ToolButton darkMode={darkMode} active={tool === "eraser"} onClick={() => {setTool("eraser")
         window.dispatchEvent(new Event("clear-selection"))
       }}>
         <EraserIcon />
@@ -96,11 +101,11 @@ const Toolbar = ({ tool, setTool, onUndo, onRedo, isToolLocked, setisToolLocked 
       <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
       {/* Undo / Redo */}
-      <ToolButton onClick={onUndo}>
+      <ToolButton darkMode={darkMode} onClick={onUndo}>
         <UndoIcon />
       </ToolButton>
 
-      <ToolButton onClick={onRedo}>
+      <ToolButton darkMode={darkMode} onClick={onRedo}>
         <RedoIcon />
       </ToolButton>
 

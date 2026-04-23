@@ -11,7 +11,7 @@ import {
 } from "../utils/canvasUtils"
 import { getRectCenter, inverseRotatePoint} from "../utils/rectUtils"
 
-export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSize,strokeStyle,fillColor,strokeOpacity, socketRef, drawGrid,spacePressRef,roomId, userIdRef,notifySelectionChange 
+export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSize,strokeStyle,fillColor,strokeOpacity, socketRef, drawGrid,darkMode,spacePressRef,roomId, userIdRef,notifySelectionChange 
     // isEditingRef
 ) => {
 
@@ -256,7 +256,7 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
                 ctx.globalAlpha = 0.8
             }
 
-            drawStroke(ctx, stroke, scaleRef.current)
+            drawStroke(ctx, stroke, scaleRef.current, darkMode)
             if(stroke.id === hoveredIdRef.current && tool === "select"){
                 drawHoverOutline(ctx, stroke, scaleRef.current)
             }
@@ -314,7 +314,7 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
             }
         }
         if(currentStrokeRef.current){
-            drawStroke(ctx, currentStrokeRef.current, scaleRef.current)
+            drawStroke(ctx, currentStrokeRef.current, scaleRef.current, darkMode)
         }
         if (isMarqueeSelectingRef.current && marqueeStartRef.current && marqueeCurrentRef.current) {
             const start = marqueeStartRef.current
@@ -766,7 +766,14 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
         ctx.translate(offsetXRef.current, offsetYRef.current)
         ctx.scale(scaleRef.current, scaleRef.current)
         ctx.lineWidth = stroke.width
-        ctx.strokeStyle = stroke.color
+        let renderColor = stroke.color
+
+        if (darkMode && (stroke.color === "black" || stroke.color === "#000000")) {
+            renderColor = "#ffffff"
+        }
+
+        ctx.strokeStyle = renderColor
+        ctx.globalAlpha = stroke.opacity ?? 1
         if(stroke.tool === "eraser"){
             ctx.globalCompositeOperation = "destination-out"
         }else{
@@ -776,7 +783,7 @@ export const useCanvasInteractions = (tool,setTool, isToolLocked, color, brushSi
         ctx.moveTo(lastPoint.x, lastPoint.y)
         ctx.lineTo(x,y)
         ctx.stroke()
-
+        ctx.globalAlpha = 1
         ctx.restore()
 
         stroke.points.push({x,y})
